@@ -46,7 +46,21 @@ fi
 # Обновляем docker-compose.ip.yml
 if [ -f "docker-compose.ip.yml" ]; then
     echo "Обновление docker-compose.ip.yml..."
+    
+    # Разрешаем конфликты git (если есть)
+    if grep -q "<<<<<<< " docker-compose.ip.yml; then
+        echo "  Разрешение git конфликтов..."
+        # Убираем маркеры конфликта, оставляя общий вариант
+        sed -i.bak '/<<<<<<< /,/>>>>>>> Stashed changes/d' docker-compose.ip.yml
+        sed -i.bak '/=======/d' docker-compose.ip.yml
+    fi
+    
+    # Заменяем YOUR_SERVER_IP на реальный IP
     sed -i.bak "s/YOUR_SERVER_IP/${SERVER_IP}/g" docker-compose.ip.yml
+    
+    # Убираем дублирующиеся строки комментариев
+    sed -i.bak '/^# Использование: docker-compose -f docker-compose.ip.yml up -d$/N;/^# Использование: docker-compose -f docker-compose.ip.yml up -d\n# Использование: docker-compose -f docker-compose.ip.yml up -d$/d' docker-compose.ip.yml
+    
     echo "✅ docker-compose.ip.yml обновлен"
 fi
 

@@ -1,6 +1,5 @@
 # Docker Compose для запуска по IP адресу (без HTTPS)
 # Использование: docker-compose -f docker-compose.ip.yml up -d
-# Использование: docker-compose -f docker-compose.ip.yml up -d
 # Замените YOUR_SERVER_IP на IP вашего сервера
 
 services:
