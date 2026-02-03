@@ -11,7 +11,8 @@ ARG VITE_WS_URL
 COPY package*.json ./
 
 # Установка зависимостей
-RUN npm ci
+# Используем npm install, так как package-lock.json может отсутствовать
+RUN npm install --legacy-peer-deps
 
 # Копирование исходного кода
 COPY . .
