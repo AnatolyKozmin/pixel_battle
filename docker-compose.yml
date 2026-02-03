@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: pixel_battle_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pixel_battle}
+      POSTGRES_USER: ${POSTGRES_USER:-pixel_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pixel_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pixel_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pixel_battle_network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: pixel_battle_redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pixel_battle_network
+
+  # Backend API (можно масштабировать)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pixel_battle_backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-pixel_user}:${POSTGRES_PASSWORD:-pixel_pass}@postgres:5432/${POSTGRES_DB:-pixel_battle}
+      REDIS_URL: redis://redis:6379/0
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me-in-production}
+      CANVAS_WIDTH: ${CANVAS_WIDTH:-1000}
+      CANVAS_HEIGHT: ${CANVAS_HEIGHT:-1000}
+      PIXEL_COOLDOWN_SECONDS: ${PIXEL_COOLDOWN_SECONDS:-5}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/venv
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pixel_battle_network
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+        - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8000}
+    container_name: pixel_battle_frontend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - backend
+    networks:
+      - pixel_battle_network
+    restart: unless-stopped
+
+  # Nginx reverse proxy (для production)
+  nginx:
+    image: nginx:alpine
+    container_name: pixel_battle_nginx
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - pixel_battle_network
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  pixel_battle_network:
+    driver: bridge

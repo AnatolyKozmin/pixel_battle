@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # PostgreSQL (используется внешний с pgbouncer)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   ...
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: pixel_battle_redis_prod
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data_prod:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pixel_battle_network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # Backend API - масштабируемый сервис
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: pixel_battle_backend:latest
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PUBSUB_CHANNEL: ${REDIS_PUBSUB_CHANNEL:-pixel_updates}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL}
+      APP_SECRET_KEY: ${APP_SECRET_KEY}
+      CANVAS_WIDTH: ${CANVAS_WIDTH:-1000}
+      CANVAS_HEIGHT: ${CANVAS_HEIGHT:-1000}
+      PIXEL_COOLDOWN_SECONDS: ${PIXEL_COOLDOWN_SECONDS:-5}
+      MAX_PIXELS_PER_USER: ${MAX_PIXELS_PER_USER:-10000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --loop uvloop --limit-concurrency 1000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - pixel_battle_network
+    restart: always
+    # Для масштабирования используйте: docker-compose -f docker-compose.prod.yml up -d --scale backend=2
+    # Или используйте Docker Swarm mode для deploy секции
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL}
+        - VITE_WS_URL=${VITE_WS_URL}
+    image: pixel_battle_frontend:latest
+    ports:
+      - "127.0.0.1:80:80"
+    depends_on:
+      - backend
+    networks:
+      - pixel_battle_network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: pixel_battle_nginx_prod
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - pixel_battle_network
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  redis_data_prod:
+
+networks:
+  pixel_battle_network:
+    driver: bridge

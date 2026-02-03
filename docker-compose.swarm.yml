@@ -1,0 +1,122 @@
+version: '3.8'
+
+# Docker Swarm mode конфигурация для production с поддержкой deploy секции
+# Использование: docker stack deploy -c docker-compose.swarm.yml pixel_battle
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - pixel_battle_network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  backend:
+    image: pixel_battle_backend:latest
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PUBSUB_CHANNEL: ${REDIS_PUBSUB_CHANNEL:-pixel_updates}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL}
+      APP_SECRET_KEY: ${APP_SECRET_KEY}
+      CANVAS_WIDTH: ${CANVAS_WIDTH:-1000}
+      CANVAS_HEIGHT: ${CANVAS_HEIGHT:-1000}
+      PIXEL_COOLDOWN_SECONDS: ${PIXEL_COOLDOWN_SECONDS:-5}
+      MAX_PIXELS_PER_USER: ${MAX_PIXELS_PER_USER:-10000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+    networks:
+      - pixel_battle_network
+    deploy:
+      replicas: 2  # Количество инстансов
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+      placement:
+        constraints:
+          - node.role == worker
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    image: pixel_battle_frontend:latest
+    networks:
+      - pixel_battle_network
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == worker
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - pixel_battle_network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+
+volumes:
+  redis_data_prod:
+
+networks:
+  pixel_battle_network:
+    driver: overlay
