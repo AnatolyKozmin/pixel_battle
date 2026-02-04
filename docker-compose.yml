@@ -35,7 +35,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - pixel_battle_network
+      - infra_net
 
   # Backend API (можно масштабировать)
   backend:
@@ -52,9 +52,9 @@ services:
       CANVAS_WIDTH: ${CANVAS_WIDTH:-1000}
       CANVAS_HEIGHT: ${CANVAS_HEIGHT:-1000}
       PIXEL_COOLDOWN_SECONDS: ${PIXEL_COOLDOWN_SECONDS:-5}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,http://localhost}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:8080,http://localhost:8001}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_PORT:-8001}:8000"
     depends_on:
       redis:
         condition: service_healthy
@@ -70,7 +70,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - pixel_battle_network
+      - infra_net
     restart: unless-stopped
 
   # Frontend
@@ -79,19 +79,19 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
-        - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8000}
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8001}
+        - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8001}
     container_name: pixel_battle_frontend
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       - backend
     networks:
-      - pixel_battle_network
+      - infra_net
     restart: unless-stopped
     environment:
-      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
-      - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8000}
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8001}
+      - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8001}
 
   # Nginx reverse proxy (для production)
   nginx:
@@ -106,7 +106,7 @@ services:
       - backend
       - frontend
     networks:
-      - pixel_battle_network
+      - infra_net
     restart: unless-stopped
     profiles:
       - production
@@ -116,5 +116,5 @@ volumes:
   redis_data:
 
 networks:
-  pixel_battle_network:
-    driver: bridge
+  infra_net:
+    external: true

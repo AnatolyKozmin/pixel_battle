@@ -2,10 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Установка системных зависимостей
-RUN apt-get update && apt-get install -y \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+# Системные зависимости не нужны - все пакеты имеют бинарные wheels
 
 # Копирование requirements и установка зависимостей
 COPY requirements.txt .
