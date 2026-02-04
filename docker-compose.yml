@@ -1,23 +1,24 @@
 services:
-  # PostgreSQL
-  postgres:
-    image: postgres:15-alpine
-    container_name: pixel_battle_postgres
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-pixel_battle}
-      POSTGRES_USER: ${POSTGRES_USER:-pixel_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pixel_pass}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pixel_user}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - pixel_battle_network
+  # PostgreSQL - используем внешний (через pgbouncer на 127.0.0.1:6432)
+  # Закомментировано, так как используется внешняя БД
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: pixel_battle_postgres
+  #   environment:
+  #     POSTGRES_DB: ${POSTGRES_DB:-pixel_battle}
+  #     POSTGRES_USER: ${POSTGRES_USER:-pixel_user}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pixel_pass}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "${POSTGRES_PORT:-5432}:5432"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pixel_user}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - pixel_battle_network
 
   # Redis
   redis:
@@ -43,12 +44,10 @@ services:
       dockerfile: Dockerfile
     container_name: pixel_battle_backend
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-pixel_user}:${POSTGRES_PASSWORD:-pixel_pass}@postgres:5432/${POSTGRES_DB:-pixel_battle}
-      POSTGRES_DB: ${POSTGRES_DB:-pixel_battle}
-      POSTGRES_USER: ${POSTGRES_USER:-pixel_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pixel_pass}
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379/0
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      REDIS_PUBSUB_CHANNEL: ${REDIS_PUBSUB_CHANNEL:-pixel_updates}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me-in-production}
       CANVAS_WIDTH: ${CANVAS_WIDTH:-1000}
       CANVAS_HEIGHT: ${CANVAS_HEIGHT:-1000}
@@ -57,10 +56,10 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Для доступа к 127.0.0.1 на хосте через host.docker.internal
     volumes:
       - ./backend:/app
       - /app/venv

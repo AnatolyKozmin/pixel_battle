@@ -7,11 +7,7 @@ from typing import List
 
 class Settings(BaseSettings):
     # Database
-    # Master (для записи) - через pgbouncer
     DATABASE_URL: str = "postgresql+asyncpg://pixel_user:pixel_pass@postgres:5432/pixel_battle"
-    # Replica (для чтения) - через pgbouncer
-    # Если не указан, используется DATABASE_URL для всех операций
-    DATABASE_REPLICA_URL: str = ""
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     
