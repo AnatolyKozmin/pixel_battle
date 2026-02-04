@@ -9,6 +9,8 @@ body {
   background: var(--tg-theme-bg-color, #ffffff);
   color: var(--tg-theme-text-color, #000000);
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #app {
@@ -16,4 +18,16 @@ body {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+/* Улучшение для мобильных устройств */
+@media (max-width: 768px) {
+  body {
+    touch-action: manipulation; /* Улучшает отзывчивость touch */
+  }
+  
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
 }

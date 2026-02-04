@@ -1,6 +1,28 @@
 import { ref } from 'vue'
 import axios from 'axios'
 
+// Настройка axios с timeout и обработкой ошибок
+const axiosInstance = axios.create({
+  timeout: 10000, // 10 секунд
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+
+// Interceptor для обработки ошибок сети
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.code === 'ECONNABORTED' || error.message === 'Network Error' || !error.response) {
+      // Ошибка сети или timeout
+      const networkError = new Error('Ошибка сети. Проверьте подключение к интернету.')
+      networkError.isNetworkError = true
+      return Promise.reject(networkError)
+    }
+    return Promise.reject(error)
+  }
+)
+
 export function usePixelBattle(canvasRef) {
   const zoom = ref(1)
   const panX = ref(0)
@@ -76,7 +98,7 @@ export function usePixelBattle(canvasRef) {
   async function loadCanvas(apiUrl) {
     try {
       console.log(`Загрузка холста с ${apiUrl}/api/canvas/`)
-      const response = await axios.get(`${apiUrl}/api/canvas/`)
+      const response = await axiosInstance.get(`${apiUrl}/api/canvas/`)
       const canvasPixels = response.data
       
       console.log(`Загружено пикселей: ${canvasPixels.length}`)
@@ -124,10 +146,10 @@ export function usePixelBattle(canvasRef) {
         headers['X-Telegram-Init-Data'] = initData
       }
       
-      const response = await axios.post(
+      const response = await axiosInstance.post(
         `${apiUrl}/api/pixels/`,
         { x, y, color },
-        { headers }
+        { headers, timeout: 10000 }
       )
       
       // Рисуем пиксель сразу (оптимистичное обновление)
@@ -139,9 +161,14 @@ export function usePixelBattle(canvasRef) {
       console.error('Детали ошибки:', {
         status: error.response?.status,
         data: error.response?.data,
-        message: error.message
+        message: error.message,
+        isNetworkError: error.isNetworkError
       })
       
+      // Обработка ошибок сети
+      if (error.isNetworkError || error.code === 'ECONNABORTED' || error.message === 'Network Error') {
+        throw new Error('Ошибка сети. Проверьте подключение к интернету и попробуйте снова.')
+      }
       
       if (error.response?.status === 401) {
         throw new Error('Ошибка авторизации. Обновите страницу.')
@@ -150,6 +177,10 @@ export function usePixelBattle(canvasRef) {
       if (error.response?.status === 422) {
         const detail = error.response?.data?.detail || 'Ошибка валидации данных'
         throw new Error(`Ошибка валидации: ${detail}`)
+      }
+      
+      if (error.response?.status === 500) {
+        throw new Error('Ошибка сервера. Попробуйте позже.')
       }
       
       const errorMessage = error.response?.data?.detail || error.message || 'Не удалось разместить пиксель'

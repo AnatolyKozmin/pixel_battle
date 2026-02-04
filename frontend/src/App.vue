@@ -3,11 +3,11 @@
     <div class="header">
       <h1>🎨 Pixel Battle</h1>
       <div class="user-info">
-        <span v-if="user">{{ user.first_name || 'Пользователь' }}</span>
+        <span v-if="user" class="user-name">{{ user.first_name || 'Пользователь' }}</span>
         <span class="pixels-count">Ваших пикселей: {{ user?.pixels_placed || 0 }}</span>
         <span class="canvas-pixels-count" v-if="canvasStats">
-          Всего на холсте: {{ canvasStats.total_pixels }} 
-          ({{ canvasStats.coverage_percent }}% заполнено)
+          Всего: {{ canvasStats.total_pixels }} 
+          ({{ canvasStats.coverage_percent }}%)
         </span>
       </div>
     </div>
@@ -38,24 +38,35 @@
       
     </div>
     
-    <div class="controls">
-      <button 
-        @click="togglePanMode" 
-        class="pan-btn" 
-        :class="{ active: isPanMode }"
-        :title="isPanMode ? 'Режим перемещения (нажмите для рисования)' : 'Режим рисования (нажмите для перемещения)'"
-      >
-        {{ isPanMode ? '✋' : '✏️' }}
-      </button>
-      <button @click="openColorPicker" class="color-btn">
-        Выбрать цвет
-      </button>
-      <button @click="zoomIn" class="zoom-btn">+</button>
-      <button @click="zoomOut" class="zoom-btn">-</button>
-      <button @click="resetView" class="reset-btn">Сброс</button>
-      <button @click="toggleMusic" class="music-btn" :class="{ active: isMusicEnabled }">
-        {{ isMusicEnabled ? '🔊' : '🔇' }}
-      </button>
+    <!-- iOS-style Bottom Bar -->
+    <div class="ios-bottom-bar">
+      <div class="ios-bar-content">
+        <button 
+          @click="togglePanMode" 
+          class="ios-btn" 
+          :class="{ active: isPanMode }"
+        >
+          <span class="ios-icon">{{ isPanMode ? '👆' : '✏️' }}</span>
+          <span class="ios-label">{{ isPanMode ? 'Перемещение' : 'Рисование' }}</span>
+        </button>
+        <button @click="openColorPicker" class="ios-btn">
+          <span class="ios-icon">🎨</span>
+          <span class="ios-label">Цвет</span>
+        </button>
+        <button @click="zoomIn" class="ios-btn icon-only">
+          <span class="ios-icon">+</span>
+        </button>
+        <button @click="zoomOut" class="ios-btn icon-only">
+          <span class="ios-icon">−</span>
+        </button>
+        <button @click="resetView" class="ios-btn">
+          <span class="ios-icon">↺</span>
+          <span class="ios-label">Сброс</span>
+        </button>
+        <button @click="toggleMusic" class="ios-btn icon-only" :class="{ active: isMusicEnabled }">
+          <span class="ios-icon">{{ isMusicEnabled ? '🔊' : '🔇' }}</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -267,8 +278,21 @@ async function handleCanvasClick(event) {
     playErrorSound() // Звук ошибки
     
     // Показываем более детальное сообщение об ошибке
-    const errorMessage = error.message || 'Не удалось разместить пиксель. Попробуйте позже.'
-    alert(errorMessage)
+    let errorMessage = error.message || 'Не удалось разместить пиксель. Попробуйте позже.'
+    
+    // Улучшенная обработка network error
+    if (error.message && error.message.includes('сети')) {
+      errorMessage = 'Ошибка сети. Проверьте подключение к интернету и попробуйте снова.'
+    } else if (error.message && error.message.includes('timeout')) {
+      errorMessage = 'Превышено время ожидания. Проверьте подключение и попробуйте снова.'
+    }
+    
+    // Используем более дружелюбный способ показа ошибки
+    if (window.Telegram?.WebApp?.showAlert) {
+      window.Telegram.WebApp.showAlert(errorMessage)
+    } else {
+      alert(errorMessage)
+    }
   }
 }
 
@@ -369,10 +393,20 @@ function resetView() {
   flex-direction: column;
   align-items: flex-end;
   font-size: 12px;
+  gap: 2px;
+}
+
+.user-name {
+  font-weight: 500;
 }
 
 .pixels-count {
   color: var(--tg-theme-hint-color, #999999);
+}
+
+.canvas-pixels-count {
+  color: var(--tg-theme-hint-color, #999999);
+  font-size: 11px;
 }
 
 .canvas-container {
@@ -380,6 +414,7 @@ function resetView() {
   position: relative;
   overflow: hidden;
   background: #f0f0f0;
+  padding-bottom: 80px; /* Отступ для bottom bar */
 }
 
 canvas {
@@ -415,63 +450,231 @@ canvas {
 }
 
 
-.controls {
-  padding: 10px;
-  background: var(--tg-theme-bg-color, #ffffff);
-  border-top: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+/* iOS-style Bottom Bar */
+.ios-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 12px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top: 0.5px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+  z-index: 1000;
+}
+
+/* Темная тема для iOS bottom bar */
+@media (prefers-color-scheme: dark) {
+  .ios-bottom-bar {
+    background: rgba(28, 28, 30, 0.7);
+    border-top: 0.5px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+  }
+  
+  .ios-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--tg-theme-text-color, #ffffff);
+  }
+  
+  .ios-btn:active {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  
+  .ios-btn.active {
+    background: rgba(0, 122, 255, 0.25);
+    color: #5AC8FA;
+  }
+}
+
+.ios-bar-content {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
-button {
-  padding: 10px 20px;
+.ios-btn {
+  padding: 10px 14px;
   border: none;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 12px;
+  font-size: 13px;
   cursor: pointer;
-  background: var(--tg-theme-button-color, #3390ec);
-  color: var(--tg-theme-button-text-color, #ffffff);
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--tg-theme-text-color, #000000);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 60px;
+  min-width: 60px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  overflow: hidden;
 }
 
-button:active {
-  opacity: 0.8;
+.ios-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.1);
+  transform: translate(-50%, -50%);
+  transition: width 0.3s, height 0.3s;
 }
 
-.zoom-btn {
-  width: 40px;
-  height: 40px;
+.ios-btn:active::before {
+  width: 200px;
+  height: 200px;
+}
+
+.ios-btn:active {
+  transform: scale(0.95);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.ios-btn.active {
+  background: rgba(0, 122, 255, 0.15);
+  color: #007AFF;
+}
+
+.ios-btn.active .ios-icon {
+  transform: scale(1.1);
+}
+
+.ios-icon {
+  font-size: 24px;
+  line-height: 1;
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.ios-label {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.ios-btn.icon-only {
+  min-width: 50px;
+  min-height: 50px;
+  padding: 10px;
+}
+
+.ios-btn.icon-only .ios-icon {
   font-size: 20px;
-  font-weight: bold;
 }
 
-.reset-btn {
-  background: var(--tg-theme-destructive-text-color, #ff3b30);
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+  .header {
+    padding: 8px;
+    flex-wrap: wrap;
+  }
+
+  .header h1 {
+    font-size: 18px;
+  }
+
+  .user-info {
+    font-size: 11px;
+    width: 100%;
+    margin-top: 4px;
+    align-items: flex-start;
+  }
+
+  .ios-bottom-bar {
+    padding: 6px 8px;
+  }
+
+  .ios-bar-content {
+    gap: 6px;
+  }
+
+  .ios-btn {
+    min-height: 56px;
+    min-width: 56px;
+    padding: 8px 12px;
+  }
+
+  .ios-btn.icon-only {
+    min-width: 48px;
+    min-height: 48px;
+    padding: 8px;
+  }
+
+  .ios-icon {
+    font-size: 22px;
+  }
+
+  .ios-label {
+    font-size: 10px;
+  }
+
+  .color-picker {
+    top: 5px;
+    right: 5px;
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .color-picker input[type="color"] {
+    width: 36px;
+    height: 36px;
+  }
+
+  .color-hex {
+    font-size: 12px;
+  }
 }
 
-.pan-btn {
-  width: 40px;
-  height: 40px;
-  font-size: 20px;
-  background: var(--tg-theme-button-color, #3390ec);
-  opacity: 0.7;
-}
+/* Очень маленькие экраны */
+@media (max-width: 480px) {
+  .header h1 {
+    font-size: 16px;
+  }
 
-.pan-btn.active {
-  opacity: 1;
-  background: var(--tg-theme-button-color, #3390ec);
-  border: 2px solid var(--tg-theme-text-color, #000000);
-}
+  .user-info {
+    font-size: 10px;
+  }
 
-.music-btn {
-  width: 40px;
-  height: 40px;
-  font-size: 20px;
-  background: var(--tg-theme-button-color, #3390ec);
-  opacity: 0.7;
-}
+  .ios-bottom-bar {
+    padding: 4px 6px;
+  }
 
-.music-btn.active {
-  opacity: 1;
+  .ios-bar-content {
+    gap: 4px;
+  }
+
+  .ios-btn {
+    min-height: 52px;
+    min-width: 52px;
+    padding: 6px 10px;
+  }
+
+  .ios-btn.icon-only {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px;
+  }
+
+  .ios-icon {
+    font-size: 20px;
+  }
+
+  .ios-label {
+    font-size: 9px;
+  }
 }
 </style>
