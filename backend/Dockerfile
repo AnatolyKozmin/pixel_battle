@@ -20,10 +20,10 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # Порт приложения
-EXPOSE 8000
+EXPOSE 8002
 
 # Entrypoint для инициализации БД и миграций
 ENTRYPOINT ["/entrypoint.sh"]
 
 # Команда запуска
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002", "--workers", "1"]

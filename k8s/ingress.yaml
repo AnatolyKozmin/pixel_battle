@@ -30,11 +30,11 @@ spec:
           service:
             name: pixel-battle-backend
             port:
-              number: 8000
+              number: 8002
       - path: /ws
         pathType: Prefix
         backend:
           service:
             name: pixel-battle-backend
             port:
-              number: 8000
+              number: 8002

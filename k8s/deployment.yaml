@@ -19,7 +19,7 @@ spec:
         image: pixel-battle-backend:latest
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8000
+        - containerPort: 8002
           name: http
         env:
         - name: DATABASE_URL
@@ -57,7 +57,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 8000
+            port: 8002
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -65,7 +65,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 8000
+            port: 8002
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
@@ -80,8 +80,8 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - port: 8000
-    targetPort: 8000
+  - port: 8002
+    targetPort: 8002
     protocol: TCP
     name: http
   selector:

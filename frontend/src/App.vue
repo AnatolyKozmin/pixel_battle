@@ -83,8 +83,8 @@ const user = ref(null)
 const canvasStats = ref(null)
 const isPanMode = ref(false) // Режим перемещения
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002'
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8002'
 
 const { 
   initCanvas, 
