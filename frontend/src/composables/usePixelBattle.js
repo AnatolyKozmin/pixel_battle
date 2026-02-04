@@ -3,12 +3,21 @@ import axios from 'axios'
 
 export function usePixelBattle(canvasRef) {
   const zoom = ref(1)
+  const panX = ref(0)
+  const panY = ref(0)
   const canvas = ref(null)
   const ctx = ref(null)
   const pixels = ref(new Map())
+  const showGrid = ref(false)
   
   const CANVAS_WIDTH = 1000
   const CANVAS_HEIGHT = 1000
+  
+  // Для обработки жестов тачпада
+  let isPanning = false
+  let lastPanPoint = { x: 0, y: 0 }
+  let lastPinchDistance = 0
+  let isPinching = false
   
   async function initCanvas() {
     if (!canvasRef.value) return
@@ -44,10 +53,37 @@ export function usePixelBattle(canvasRef) {
     pixels.value.set(key, color)
   }
   
+  function redrawCanvas() {
+    if (!ctx.value) return
+    
+    // Очищаем canvas
+    ctx.value.fillStyle = '#FFFFFF'
+    ctx.value.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+    
+    // Рисуем все пиксели
+    pixels.value.forEach((color, key) => {
+      const [x, y] = key.split(',').map(Number)
+      ctx.value.fillStyle = color
+      ctx.value.fillRect(x, y, 1, 1)
+    })
+    
+    // Рисуем сетку поверх, если нужно
+    if (showGrid.value) {
+      drawGrid()
+    }
+  }
+  
   async function loadCanvas(apiUrl) {
     try {
+      console.log(`Загрузка холста с ${apiUrl}/api/canvas/`)
       const response = await axios.get(`${apiUrl}/api/canvas/`)
       const canvasPixels = response.data
+      
+      console.log(`Загружено пикселей: ${canvasPixels.length}`)
+      
+      if (canvasPixels.length === 0) {
+        console.warn('Холст пустой - пикселей нет')
+      }
       
       // Очищаем canvas
       if (ctx.value) {
@@ -56,11 +92,26 @@ export function usePixelBattle(canvasRef) {
       }
       
       // Рисуем все пиксели
-      canvasPixels.forEach(pixel => {
+      canvasPixels.forEach((pixel, index) => {
+        if (index < 10) {
+          console.log(`Пиксель ${index}: x=${pixel.x}, y=${pixel.y}, color=${pixel.color}`)
+        }
         drawPixel(pixel.x, pixel.y, pixel.color)
       })
+      
+      console.log(`Отрисовано пикселей: ${canvasPixels.length}`)
+      
+      // Рисуем сетку после загрузки пикселей, если нужно
+      if (showGrid.value) {
+        setTimeout(() => drawGrid(), 0)
+      }
     } catch (error) {
       console.error('Ошибка загрузки холста:', error)
+      console.error('Детали ошибки:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      })
     }
   }
   
@@ -68,14 +119,15 @@ export function usePixelBattle(canvasRef) {
     const initData = window.Telegram?.WebApp?.initData || ''
     
     try {
+      const headers = {}
+      if (initData) {
+        headers['X-Telegram-Init-Data'] = initData
+      }
+      
       const response = await axios.post(
         `${apiUrl}/api/pixels/`,
         { x, y, color },
-        {
-          headers: {
-            'X-Telegram-Init-Data': initData
-          }
-        }
+        { headers }
       )
       
       // Рисуем пиксель сразу (оптимистичное обновление)
@@ -83,10 +135,25 @@ export function usePixelBattle(canvasRef) {
       
       return response.data
     } catch (error) {
-      if (error.response?.status === 429) {
-        throw new Error('Кулдаун не истёк. Подождите немного.')
+      console.error('Ошибка размещения пикселя:', error)
+      console.error('Детали ошибки:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      })
+      
+      
+      if (error.response?.status === 401) {
+        throw new Error('Ошибка авторизации. Обновите страницу.')
       }
-      throw error
+      
+      if (error.response?.status === 422) {
+        const detail = error.response?.data?.detail || 'Ошибка валидации данных'
+        throw new Error(`Ошибка валидации: ${detail}`)
+      }
+      
+      const errorMessage = error.response?.data?.detail || error.message || 'Не удалось разместить пиксель'
+      throw new Error(errorMessage)
     }
   }
   
@@ -107,8 +174,147 @@ export function usePixelBattle(canvasRef) {
   
   function updateCanvasTransform() {
     if (!canvas.value) return
-    canvas.value.style.transform = `scale(${zoom.value})`
+    canvas.value.style.transform = `translate(${panX.value}px, ${panY.value}px) scale(${zoom.value})`
     canvas.value.style.transformOrigin = 'top left'
+    
+    // Показываем сетку при зуме > 2
+    const shouldShowGrid = zoom.value > 2
+    if (shouldShowGrid !== showGrid.value) {
+      showGrid.value = shouldShowGrid
+      redrawCanvas()
+    } else if (showGrid.value) {
+      redrawCanvas()
+    }
+  }
+  
+  function drawGrid() {
+    if (!ctx.value || !showGrid.value) return
+    
+    // Сохраняем текущее состояние контекста
+    ctx.value.save()
+    
+    const gridSize = 1 // Сетка размером 1x1 пиксель
+    ctx.value.strokeStyle = 'rgba(200, 200, 200, 0.3)'
+    ctx.value.lineWidth = 0.3
+    
+    // Рисуем сетку на всем холсте (видимость контролируется CSS transform)
+    // Вертикальные линии
+    for (let x = 0; x <= CANVAS_WIDTH; x += gridSize) {
+      ctx.value.beginPath()
+      ctx.value.moveTo(x, 0)
+      ctx.value.lineTo(x, CANVAS_HEIGHT)
+      ctx.value.stroke()
+    }
+    
+    // Горизонтальные линии
+    for (let y = 0; y <= CANVAS_HEIGHT; y += gridSize) {
+      ctx.value.beginPath()
+      ctx.value.moveTo(0, y)
+      ctx.value.lineTo(CANVAS_WIDTH, y)
+      ctx.value.stroke()
+    }
+    
+    // Восстанавливаем состояние контекста
+    ctx.value.restore()
+  }
+  
+  function handleWheel(event) {
+    event.preventDefault()
+    
+    const delta = event.deltaY > 0 ? 0.9 : 1.1
+    const newZoom = Math.max(0.1, Math.min(10, zoom.value * delta))
+    
+    // Зум к точке курсора
+    if (!canvas.value) return
+    
+    const rect = canvas.value.getBoundingClientRect()
+    // mouseX и mouseY - координаты курсора относительно левого верхнего угла canvas в viewport
+    // (уже с учетом transform)
+    const mouseX = event.clientX - rect.left
+    const mouseY = event.clientY - rect.top
+    
+    // Вычисляем мировые координаты точки под курсором
+    // screenX = worldX * zoom, поэтому worldX = screenX / zoom
+    const worldX = mouseX / zoom.value
+    const worldY = mouseY / zoom.value
+    
+    // Обновляем zoom
+    zoom.value = newZoom
+    
+    // Пересчитываем pan так, чтобы точка под курсором осталась на месте
+    // screenX = panX + worldX * zoom (но rect.left уже включает panX, поэтому просто worldX * zoom)
+    // Но нам нужно сохранить мировую координату, поэтому:
+    panX.value = mouseX - worldX * zoom.value
+    panY.value = mouseY - worldY * zoom.value
+    
+    updateCanvasTransform()
+  }
+  
+  function handleTouchStart(event, panModeEnabled = false) {
+    // Если не в режиме перемещения, не обрабатываем жесты
+    if (!panModeEnabled) {
+      return
+    }
+    
+    if (event.touches.length === 1) {
+      // Начало панорамирования
+      isPanning = true
+      lastPanPoint = { x: event.touches[0].clientX, y: event.touches[0].clientY }
+    } else if (event.touches.length === 2) {
+      // Начало pinch-to-zoom
+      isPinching = true
+      const touch1 = event.touches[0]
+      const touch2 = event.touches[1]
+      lastPinchDistance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      )
+    }
+  }
+  
+  function handleTouchMove(event, panModeEnabled = false) {
+    if (!panModeEnabled) {
+      return
+    }
+    
+    event.preventDefault()
+    
+    if (isPanning && event.touches.length === 1) {
+      // Панорамирование
+      const currentX = event.touches[0].clientX
+      const currentY = event.touches[0].clientY
+      
+      panX.value += currentX - lastPanPoint.x
+      panY.value += currentY - lastPanPoint.y
+      
+      lastPanPoint = { x: currentX, y: currentY }
+      updateCanvasTransform()
+    } else if (isPinching && event.touches.length === 2) {
+      // Pinch-to-zoom
+      const touch1 = event.touches[0]
+      const touch2 = event.touches[1]
+      const distance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      )
+      
+      const scale = distance / lastPinchDistance
+      zoom.value = Math.max(0.1, Math.min(10, zoom.value * scale))
+      lastPinchDistance = distance
+      
+      updateCanvasTransform()
+    }
+  }
+  
+  function handleTouchEnd(event) {
+    isPanning = false
+    isPinching = false
+  }
+  
+  function resetPan() {
+    panX.value = 0
+    panY.value = 0
+    updateCanvasTransform()
   }
   
   return {
@@ -117,8 +323,19 @@ export function usePixelBattle(canvasRef) {
     loadCanvas,
     handleClick,
     zoom,
+    panX,
+    panY,
     resetZoom,
     zoomIn,
-    zoomOut
+    zoomOut,
+    resetPan,
+    handleWheel,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+    pixels,
+    showGrid,
+    updateCanvasTransform,
+    redrawCanvas
   }
 }

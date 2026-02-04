@@ -3,9 +3,8 @@ API роуты для работы с пикселями
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from slowapi import Limiter
 
-from app.core.database import get_db
+from app.core.database import get_db, get_db_read
 from app.core.config import settings
 from app.schemas.pixel import PixelCreate, PixelResponse
 from app.services.pixel_service import PixelService
@@ -25,22 +24,23 @@ async def place_pixel(
     """
     Разместить пиксель на холсте
     """
-    # Rate limiting выполняется через middleware в main.py
-    # Проверка кулдауна
-    can_place, cooldown_end = await PixelService.check_cooldown(db, current_user_id)
-    if not can_place:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Кулдаун не истёк. Попробуйте позже."
+    print(f"Размещение пикселя: x={pixel_data.x}, y={pixel_data.y}, color={pixel_data.color}, user_id={current_user_id}")
+    
+    # Кулдаун отключен
+    try:
+        # Создание/обновление пикселя
+        pixel = await PixelService.create_or_update_pixel(
+            db, pixel_data, current_user_id
         )
-    
-    # Создание/обновление пикселя
-    pixel = await PixelService.create_or_update_pixel(
-        db, pixel_data, current_user_id
-    )
-    
-    # Обновление статистики пользователя
-    await PixelService.update_user_pixel_stats(db, current_user_id)
+        
+        # Обновление статистики пользователя
+        await PixelService.update_user_pixel_stats(db, current_user_id)
+    except Exception as e:
+        print(f"Ошибка при размещении пикселя: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при размещении пикселя: {str(e)}"
+        )
     
     # Инвалидация кеша
     await PixelService.invalidate_canvas_cache()
@@ -74,14 +74,38 @@ async def place_pixel(
                 )
                 break
     
+    print(f"Пиксель успешно размещен: id={pixel.id}, x={pixel.x}, y={pixel.y}, color={pixel.color}")
     return pixel
+
+
+@router.get("/test")
+async def test_pixel_placement(db: AsyncSession = Depends(get_db)):
+    """Тестовый эндпоинт для проверки работы БД"""
+    from sqlalchemy import select, func
+    from app.models.pixel import Pixel
+    
+    # Подсчет пикселей
+    result = await db.execute(select(func.count(Pixel.id)))
+    count = result.scalar() or 0
+    
+    # Получение нескольких пикселей
+    result = await db.execute(select(Pixel).limit(5))
+    pixels = result.scalars().all()
+    
+    return {
+        "total_pixels": count,
+        "sample_pixels": [
+            {"id": p.id, "x": p.x, "y": p.y, "color": p.color}
+            for p in pixels
+        ]
+    }
 
 
 @router.get("/{x}/{y}", response_model=PixelResponse)
 async def get_pixel(
     x: int,
     y: int,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_read)  # Используем replica для чтения
 ):
     """Получить пиксель по координатам"""
     pixel = await PixelService.get_pixel(db, x, y)

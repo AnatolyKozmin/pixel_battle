@@ -6,7 +6,7 @@ from typing import Set
 import json
 import asyncio
 
-from app.core.redis import get_redis, subscribe_to_updates
+from app.core.redis import get_redis
 from app.core.config import settings
 
 router = APIRouter()

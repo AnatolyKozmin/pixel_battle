@@ -4,10 +4,9 @@ API роуты для работы с холстом
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
-import aioredis
 import json
 
-from app.core.database import get_db
+from app.core.database import get_db_read
 from app.core.redis import get_redis
 from app.core.config import settings
 from app.services.pixel_service import PixelService
@@ -22,7 +21,7 @@ async def get_canvas(
     y_min: Optional[int] = Query(0, ge=0),
     x_max: Optional[int] = Query(None, ge=0),
     y_max: Optional[int] = Query(None, ge=0),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_read)  # Используем replica для чтения
 ):
     """
     Получить фрагмент холста
@@ -42,6 +41,10 @@ async def get_canvas(
     pixels = await PixelService.get_canvas_chunk(
         db, x_min, y_min, x_max, y_max
     )
+    
+    # Логируем количество пикселей
+    if x_min == 0 and y_min == 0 and x_max is None and y_max is None:
+        print(f"Загружено пикселей из БД: {len(pixels)}")
     
     # Кешируем полный холст
     if x_min == 0 and y_min == 0 and x_max is None and y_max is None:
@@ -67,4 +70,23 @@ async def get_canvas_size():
     return {
         "width": settings.CANVAS_WIDTH,
         "height": settings.CANVAS_HEIGHT
+    }
+
+
+@router.get("/stats")
+async def get_canvas_stats(db: AsyncSession = Depends(get_db_read)):  # Используем replica для чтения
+    """Получить статистику холста"""
+    from sqlalchemy import func, select
+    from app.models.pixel import Pixel
+    
+    # Подсчет общего количества пикселей
+    result = await db.execute(select(func.count(Pixel.id)))
+    total_pixels = result.scalar() or 0
+    
+    return {
+        "total_pixels": total_pixels,
+        "canvas_width": settings.CANVAS_WIDTH,
+        "canvas_height": settings.CANVAS_HEIGHT,
+        "canvas_size": settings.CANVAS_WIDTH * settings.CANVAS_HEIGHT,
+        "coverage_percent": round((total_pixels / (settings.CANVAS_WIDTH * settings.CANVAS_HEIGHT)) * 100, 2) if total_pixels > 0 else 0
     }

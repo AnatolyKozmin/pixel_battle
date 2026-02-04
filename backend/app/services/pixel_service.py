@@ -3,9 +3,8 @@
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple
-import aioredis
 
 from app.models.pixel import Pixel
 from app.models.user import User
@@ -36,26 +35,32 @@ class PixelService:
         user_id: int
     ) -> Pixel:
         """Создать или обновить пиксель"""
-        # Проверяем существующий пиксель
-        existing = await PixelService.get_pixel(db, pixel_data.x, pixel_data.y)
-        
-        if existing:
-            existing.color = pixel_data.color
-            existing.user_id = user_id
-            existing.created_at = datetime.utcnow()
-            pixel = existing
-        else:
-            pixel = Pixel(
-                x=pixel_data.x,
-                y=pixel_data.y,
-                color=pixel_data.color,
-                user_id=user_id
-            )
-            db.add(pixel)
-        
-        await db.commit()
-        await db.refresh(pixel)
-        return pixel
+        try:
+            # Проверяем существующий пиксель
+            existing = await PixelService.get_pixel(db, pixel_data.x, pixel_data.y)
+            
+            if existing:
+                existing.color = pixel_data.color
+                existing.user_id = user_id
+                existing.created_at = datetime.now(timezone.utc)
+                pixel = existing
+            else:
+                pixel = Pixel(
+                    x=pixel_data.x,
+                    y=pixel_data.y,
+                    color=pixel_data.color,
+                    user_id=user_id
+                )
+                db.add(pixel)
+            
+            await db.commit()
+            await db.refresh(pixel)
+            print(f"Пиксель успешно создан/обновлен: id={pixel.id}, x={pixel.x}, y={pixel.y}, color={pixel.color}")
+            return pixel
+        except Exception as e:
+            await db.rollback()
+            print(f"Ошибка при создании/обновлении пикселя: {e}")
+            raise
     
     @staticmethod
     async def check_cooldown(
@@ -78,7 +83,9 @@ class PixelService:
             seconds=settings.PIXEL_COOLDOWN_SECONDS
         )
         
-        if datetime.utcnow() < cooldown_end:
+        # Используем timezone-aware datetime для сравнения
+        now = datetime.now(timezone.utc)
+        if now < cooldown_end:
             return False, cooldown_end
         
         return True, None
@@ -96,7 +103,7 @@ class PixelService:
         
         if user:
             user.pixels_placed += 1
-            user.last_pixel_at = datetime.utcnow()
+            user.last_pixel_at = datetime.now(timezone.utc)
             await db.commit()
     
     @staticmethod

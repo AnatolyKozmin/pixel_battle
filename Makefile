@@ -86,6 +86,16 @@ clean-all: ## Очистить все (включая volumes)
 stats: ## Показать статистику использования ресурсов
 	docker stats
 
+# Локальный запуск
+start-local: ## Запустить локально (создаст .env файлы и запустит все)
+	@./scripts/start-local.sh
+
+stop-local: ## Остановить локальные сервисы
+	docker-compose down
+
+logs-local: ## Показать логи локальных сервисов
+	docker-compose logs -f
+
 # IP deployment команды
 setup-ip: ## Настроить для запуска по IP (использование: make setup-ip IP=192.168.1.100)
 	@if [ -z "$(IP)" ]; then \

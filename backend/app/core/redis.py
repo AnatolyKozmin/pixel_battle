@@ -2,19 +2,19 @@
 Redis клиент и pub/sub для синхронизации
 """
 import json
-import aioredis
+import redis.asyncio as redis
 from typing import Optional, Callable, Awaitable
 from app.core.config import settings
 
 
-redis_client: Optional[aioredis.Redis] = None
-pubsub: Optional[aioredis.client.PubSub] = None
+redis_client: Optional[redis.Redis] = None
+pubsub: Optional[redis.client.PubSub] = None
 
 
 async def init_redis():
     """Инициализация Redis подключения"""
     global redis_client, pubsub
-    redis_client = await aioredis.from_url(
+    redis_client = redis.from_url(
         settings.REDIS_URL,
         encoding="utf-8",
         decode_responses=True
@@ -31,7 +31,7 @@ async def close_redis():
         await redis_client.close()
 
 
-async def get_redis() -> aioredis.Redis:
+async def get_redis() -> redis.Redis:
     """Получить Redis клиент"""
     if redis_client is None:
         raise RuntimeError("Redis не инициализирован")

@@ -77,6 +77,18 @@ async def get_current_user(
     """
     Dependency для получения текущего пользователя
     """
+    # Режим разработки: если нет Telegram токена, используем тестового пользователя
+    if not settings.TELEGRAM_BOT_TOKEN:
+        # Создаем или получаем тестового пользователя для разработки
+        test_user_create = UserCreate(
+            telegram_id=999999999,  # Тестовый ID
+            username="test_user",
+            first_name="Test",
+            last_name="User"
+        )
+        user = await UserService.get_or_create_user(db, test_user_create)
+        return user.id
+    
     if not x_telegram_init_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

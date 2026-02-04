@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.redis import init_redis, close_redis
 from app.api.routes import api_router
-from app.api.websocket import websocket_router
+from app.api.websocket import router as websocket_router
 
 
 @asynccontextmanager
@@ -40,20 +40,14 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Rate limiting middleware
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    # Применяем rate limiting только к определенным путям
-    if request.url.path.startswith("/api/pixels/") and request.method == "POST":
-        await limiter.check(request)
-    response = await call_next(request)
-    return response
+# Rate limiting применяется через декоратор на роуте
+# Middleware удален, так как slowapi не поддерживает метод check() в middleware
 
 # Подключение роутеров
 app.include_router(api_router, prefix="/api")

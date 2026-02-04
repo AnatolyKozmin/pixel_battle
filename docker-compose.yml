@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL
   postgres:
@@ -46,13 +44,16 @@ services:
     container_name: pixel_battle_backend
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-pixel_user}:${POSTGRES_PASSWORD:-pixel_pass}@postgres:5432/${POSTGRES_DB:-pixel_battle}
+      POSTGRES_DB: ${POSTGRES_DB:-pixel_battle}
+      POSTGRES_USER: ${POSTGRES_USER:-pixel_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pixel_pass}
       REDIS_URL: redis://redis:6379/0
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me-in-production}
       CANVAS_WIDTH: ${CANVAS_WIDTH:-1000}
       CANVAS_HEIGHT: ${CANVAS_HEIGHT:-1000}
       PIXEL_COOLDOWN_SECONDS: ${PIXEL_COOLDOWN_SECONDS:-5}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,http://localhost}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -89,6 +90,9 @@ services:
     networks:
       - pixel_battle_network
     restart: unless-stopped
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
+      - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8000}
 
   # Nginx reverse proxy (для production)
   nginx:

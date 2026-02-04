@@ -15,26 +15,46 @@ export function useAudio() {
    * Инициализация аудио
    */
   function initAudio() {
-    // Фоновая музыка
-    backgroundMusic.value = new Audio('/sounds/background-music.mp3')
-    backgroundMusic.value.loop = true
-    backgroundMusic.value.volume = musicVolume.value
-    
-    // Звуки эффектов
-    soundEffects.value = {
-      pixelPlace: new Audio('/sounds/pixel-place.mp3'),
-      pixelError: new Audio('/sounds/pixel-error.mp3'),
-      achievement: new Audio('/sounds/achievement.mp3'),
-      notification: new Audio('/sounds/notification.mp3')
+    try {
+      // Фоновая музыка
+      backgroundMusic.value = new Audio('/sounds/background-music.mp3')
+      backgroundMusic.value.loop = true
+      backgroundMusic.value.volume = musicVolume.value
+      
+      // Обработка ошибок загрузки музыки
+      backgroundMusic.value.addEventListener('error', (e) => {
+        console.log('Фоновая музыка не найдена. Добавьте файл /sounds/background-music.mp3')
+        backgroundMusic.value = null
+      })
+    } catch (error) {
+      console.log('Не удалось инициализировать фоновую музыку:', error)
+      backgroundMusic.value = null
     }
     
-    // Устанавливаем громкость для всех звуков
-    Object.values(soundEffects.value).forEach(sound => {
-      sound.volume = soundVolume.value
-    })
+    try {
+      // Звуки эффектов (необязательные)
+      soundEffects.value = {
+        pixelPlace: new Audio('/sounds/pixel-place.mp3'),
+        pixelError: new Audio('/sounds/pixel-error.mp3'),
+        achievement: new Audio('/sounds/achievement.mp3'),
+        notification: new Audio('/sounds/notification.mp3')
+      }
+      
+      // Устанавливаем громкость для всех звуков
+      Object.values(soundEffects.value).forEach(sound => {
+        sound.volume = soundVolume.value
+        // Обработка ошибок для каждого звука
+        sound.addEventListener('error', () => {
+          // Игнорируем ошибки - звуки необязательны
+        })
+      })
+    } catch (error) {
+      console.log('Не удалось инициализировать звуки эффектов:', error)
+      soundEffects.value = {}
+    }
     
-    // Автовоспроизведение музыки (если включено)
-    if (isMusicEnabled.value) {
+    // Автовоспроизведение музыки (если включено и файл доступен)
+    if (isMusicEnabled.value && backgroundMusic.value) {
       playBackgroundMusic()
     }
   }

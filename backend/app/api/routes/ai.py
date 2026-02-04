@@ -9,7 +9,7 @@ import base64
 import io
 from PIL import Image
 
-from app.core.database import get_db
+from app.core.database import get_db_read
 from app.core.config import settings
 from app.services.ai_service import AIService
 from app.services.pixel_service import PixelService
@@ -35,7 +35,7 @@ class CanvasAnalysisResponse(BaseModel):
 @router.post("/analyze", response_model=CanvasAnalysisResponse)
 async def analyze_canvas_area(
     request: CanvasAnalysisRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_read)  # Используем replica для чтения
 ):
     """
     Анализ участка холста с помощью ИИ
@@ -89,7 +89,7 @@ async def analyze_canvas_area(
 
 @router.get("/suggestions")
 async def get_ai_suggestions(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_read)  # Используем replica для чтения
 ):
     """
     Получить предложения от ИИ для рисования

@@ -119,8 +119,10 @@ async def webhook_canvas_snapshot():
     Используется n8n для создания скриншотов и постинга в соцсети
     """
     # Возвращает информацию о холсте для создания скриншота
+    origins = settings.allowed_origins_list
+    first_origin = origins[0] if origins else "http://localhost:8000"
     return {
-        "canvas_url": f"{settings.ALLOWED_ORIGINS[0]}/api/canvas/",
+        "canvas_url": f"{first_origin}/api/canvas/",
         "width": settings.CANVAS_WIDTH,
         "height": settings.CANVAS_HEIGHT
     }

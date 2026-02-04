@@ -1,7 +1,7 @@
 """
 Схемы для работы с пикселями
 """
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from typing import Optional
 
@@ -9,10 +9,11 @@ from typing import Optional
 class PixelCreate(BaseModel):
     x: int = Field(..., ge=0, description="Координата X")
     y: int = Field(..., ge=0, description="Координата Y")
-    color: str = Field(..., regex="^#[0-9A-Fa-f]{6}$", description="HEX цвет")
+    color: str = Field(..., pattern="^#[0-9A-Fa-f]{6}$", description="HEX цвет")
     
-    @validator("x", "y")
-    def validate_coordinates(cls, v, values):
+    @field_validator("x", "y")
+    @classmethod
+    def validate_coordinates(cls, v):
         from app.core.config import settings
         max_coord = max(settings.CANVAS_WIDTH, settings.CANVAS_HEIGHT) - 1
         if v > max_coord:
@@ -21,7 +22,7 @@ class PixelCreate(BaseModel):
 
 
 class PixelUpdate(BaseModel):
-    color: str = Field(..., regex="^#[0-9A-Fa-f]{6}$", description="HEX цвет")
+    color: str = Field(..., pattern="^#[0-9A-Fa-f]{6}$", description="HEX цвет")
 
 
 class PixelResponse(BaseModel):
