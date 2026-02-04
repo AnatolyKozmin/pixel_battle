@@ -252,31 +252,37 @@ export function usePixelBattle(canvasRef) {
   function handleWheel(event) {
     event.preventDefault()
     
-    const delta = event.deltaY > 0 ? 0.9 : 1.1
-    const newZoom = Math.max(0.1, Math.min(10, zoom.value * delta))
-    
-    // Зум к точке курсора
     if (!canvas.value) return
     
-    const rect = canvas.value.getBoundingClientRect()
-    // mouseX и mouseY - координаты курсора относительно левого верхнего угла canvas в viewport
-    // (уже с учетом transform)
-    const mouseX = event.clientX - rect.left
-    const mouseY = event.clientY - rect.top
+    const delta = event.deltaY > 0 ? 0.9 : 1.1
+    const oldZoom = zoom.value
+    const newZoom = Math.max(0.1, Math.min(10, zoom.value * delta))
     
-    // Вычисляем мировые координаты точки под курсором
-    // screenX = worldX * zoom, поэтому worldX = screenX / zoom
-    const worldX = mouseX / zoom.value
-    const worldY = mouseY / zoom.value
+    // Получаем координаты курсора относительно viewport
+    const mouseX = event.clientX
+    const mouseY = event.clientY
+    
+    // Получаем позицию canvas в viewport (с учетом текущего transform)
+    const rect = canvas.value.getBoundingClientRect()
+    
+    // Координаты курсора относительно canvas (с учетом текущего pan и zoom)
+    const canvasX = mouseX - rect.left
+    const canvasY = mouseY - rect.top
+    
+    // Мировые координаты точки под курсором (в координатах исходного canvas)
+    // canvasX = panX + worldX * oldZoom
+    // worldX = (canvasX - panX) / oldZoom
+    const worldX = (canvasX - panX.value) / oldZoom
+    const worldY = (canvasY - panY.value) / oldZoom
     
     // Обновляем zoom
     zoom.value = newZoom
     
     // Пересчитываем pan так, чтобы точка под курсором осталась на месте
-    // screenX = panX + worldX * zoom (но rect.left уже включает panX, поэтому просто worldX * zoom)
-    // Но нам нужно сохранить мировую координату, поэтому:
-    panX.value = mouseX - worldX * zoom.value
-    panY.value = mouseY - worldY * zoom.value
+    // canvasX = panX + worldX * newZoom
+    // panX = canvasX - worldX * newZoom
+    panX.value = canvasX - worldX * newZoom
+    panY.value = canvasY - worldY * newZoom
     
     updateCanvasTransform()
   }

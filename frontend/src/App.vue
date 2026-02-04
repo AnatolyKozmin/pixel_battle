@@ -414,7 +414,7 @@ function resetView() {
   position: relative;
   overflow: hidden;
   background: #f0f0f0;
-  padding-bottom: 80px; /* Отступ для bottom bar */
+  padding-bottom: 100px; /* Отступ для bottom bar с отступами */
 }
 
 canvas {
@@ -450,28 +450,31 @@ canvas {
 }
 
 
-/* iOS-style Bottom Bar */
+/* iOS-style Bottom Bar - прямоугольник с закругленными углами */
 .ios-bottom-bar {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 8px 12px;
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  padding: 12px 16px;
+  padding-bottom: max(12px, calc(16px + env(safe-area-inset-bottom)));
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-top: 0.5px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+  border: 0.5px solid rgba(0, 0, 0, 0.1);
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
+  max-width: calc(100% - 32px);
+  margin: 0 auto;
 }
 
 /* Темная тема для iOS bottom bar */
 @media (prefers-color-scheme: dark) {
   .ios-bottom-bar {
     background: rgba(28, 28, 30, 0.7);
-    border-top: 0.5px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+    border: 0.5px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(255, 255, 255, 0.05);
   }
   
   .ios-btn {
@@ -595,7 +598,13 @@ canvas {
   }
 
   .ios-bottom-bar {
-    padding: 6px 8px;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    padding: 10px 12px;
+    padding-bottom: max(10px, calc(12px + env(safe-area-inset-bottom)));
+    border-radius: 18px;
+    max-width: calc(100% - 24px);
   }
 
   .ios-bar-content {
@@ -650,7 +659,13 @@ canvas {
   }
 
   .ios-bottom-bar {
-    padding: 4px 6px;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    padding: 8px 10px;
+    padding-bottom: max(8px, calc(8px + env(safe-area-inset-bottom)));
+    border-radius: 16px;
+    max-width: calc(100% - 16px);
   }
 
   .ios-bar-content {
