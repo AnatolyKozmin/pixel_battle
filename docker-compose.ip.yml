@@ -48,6 +48,11 @@ services:
     container_name: pixel_battle_backend_ip
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-pixel_user}:${POSTGRES_PASSWORD:-pixel_pass}@postgres:5432/${POSTGRES_DB:-pixel_battle}
+      # Для тестов replica = master (один и тот же контейнер)
+      DATABASE_REPLICA_URL: ${DATABASE_REPLICA_URL:-postgresql+asyncpg://${POSTGRES_USER:-pixel_user}:${POSTGRES_PASSWORD:-pixel_pass}@postgres:5432/${POSTGRES_DB:-pixel_battle}}
+      POSTGRES_DB: ${POSTGRES_DB:-pixel_battle}
+      POSTGRES_USER: ${POSTGRES_USER:-pixel_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pixel_pass}
       REDIS_URL: redis://redis:6379/0
       REDIS_PUBSUB_CHANNEL: ${REDIS_PUBSUB_CHANNEL:-pixel_updates}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
