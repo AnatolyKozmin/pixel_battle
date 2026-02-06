@@ -31,6 +31,8 @@ export function usePixelBattle(canvasRef) {
   const ctx = ref(null)
   const pixels = ref(new Map())
   const showGrid = ref(false)
+  // Флаг для отладки зума
+  const debugZoom = true
   
   const CANVAS_WIDTH = 1000
   const CANVAS_HEIGHT = 1000
@@ -254,28 +256,48 @@ export function usePixelBattle(canvasRef) {
     
     if (!canvas.value) return
     
+    const oldZoom = zoom.value
     const delta = event.deltaY > 0 ? 0.9 : 1.1
-    const newZoom = Math.max(0.1, Math.min(10, zoom.value * delta))
+    const newZoom = Math.max(0.1, Math.min(10, oldZoom * delta))
     
-    // Зум к точке курсора
     const rect = canvas.value.getBoundingClientRect()
-    // Координаты курсора относительно верхнего левого угла canvas (уже с учетом translate/scale)
     const mouseX = event.clientX - rect.left
     const mouseY = event.clientY - rect.top
     
-    // worldX/worldY — координаты в «мире» холста (до CSS-transform)
-    // rect.width = CANVAS_WIDTH * zoom, поэтому mouseX = worldX * zoom
-    const worldX = mouseX / zoom.value
-    const worldY = mouseY / zoom.value
+    const worldX = mouseX / oldZoom
+    const worldY = mouseY / oldZoom
+
+    if (debugZoom) {
+      console.log('[WHEEL BEFORE]', {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        rect,
+        mouseX,
+        mouseY,
+        worldX,
+        worldY,
+        panX: panX.value,
+        panY: panY.value,
+        zoom: oldZoom
+      })
+    }
     
-    // Обновляем zoom
     zoom.value = newZoom
     
-    // Пересчитываем pan так, чтобы точка под курсором осталась на месте
-    // mouseX = worldX * zoom + panX, но rect.left уже содержит translate,
-    // поэтому мы двигаем только panX/panY относительно текущего zoom
     panX.value = mouseX - worldX * zoom.value
     panY.value = mouseY - worldY * zoom.value
+
+    if (debugZoom) {
+      console.log('[WHEEL AFTER]', {
+        mouseX,
+        mouseY,
+        worldX,
+        worldY,
+        panX: panX.value,
+        panY: panY.value,
+        zoom: zoom.value
+      })
+    }
     
     updateCanvasTransform()
   }
@@ -333,8 +355,8 @@ export function usePixelBattle(canvasRef) {
         return
       }
 
-      const scale = distance / lastPinchDistance
       const oldZoom = zoom.value
+      const scale = distance / lastPinchDistance
       const newZoom = Math.max(0.1, Math.min(10, oldZoom * scale))
 
       // Центр жеста между двумя пальцами в координатах viewport
@@ -350,12 +372,43 @@ export function usePixelBattle(canvasRef) {
       const worldX = centerX / oldZoom
       const worldY = centerY / oldZoom
 
+      if (debugZoom) {
+        console.log('[PINCH BEFORE]', {
+          touch1: { x: touch1.clientX, y: touch1.clientY },
+          touch2: { x: touch2.clientX, y: touch2.clientY },
+          centerClientX,
+          centerClientY,
+          rect,
+          centerX,
+          centerY,
+          worldX,
+          worldY,
+          panX: panX.value,
+          panY: panY.value,
+          zoom: oldZoom,
+          distance,
+          lastPinchDistance
+        })
+      }
+
       // Обновляем zoom
       zoom.value = newZoom
 
       // Пересчитываем pan так, чтобы центр жеста остался на месте
       panX.value = centerX - worldX * newZoom
       panY.value = centerY - worldY * newZoom
+
+      if (debugZoom) {
+        console.log('[PINCH AFTER]', {
+          centerX,
+          centerY,
+          worldX,
+          worldY,
+          panX: panX.value,
+          panY: panY.value,
+          zoom: zoom.value
+        })
+      }
 
       lastPinchDistance = distance
       updateCanvasTransform()
