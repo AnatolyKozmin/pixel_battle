@@ -33,6 +33,10 @@ export function usePixelBattle(canvasRef) {
   const showGrid = ref(false)
   // Флаг для отладки зума
   const debugZoom = true
+  // Якорь зума для стабильного поведения при серии колесиков / pinch
+  let wheelAnchorActive = false
+  let wheelAnchorScreen = { x: 0, y: 0 }
+  let wheelAnchorWorld = { x: 0, y: 0 }
   
   const CANVAS_WIDTH = 1000
   const CANVAS_HEIGHT = 1000
@@ -261,14 +265,29 @@ export function usePixelBattle(canvasRef) {
     const newZoom = Math.max(0.1, Math.min(10, oldZoom * delta))
     
     const rect = canvas.value.getBoundingClientRect()
-    const mouseX = event.clientX - rect.left
-    const mouseY = event.clientY - rect.top
-    
-    // Внутри canvas точка экрана описывается как:
-    // mouseX = panX + worldX * zoom
-    // => worldX = (mouseX - panX) / zoom
-    const worldX = (mouseX - panX.value) / oldZoom
-    const worldY = (mouseY - panY.value) / oldZoom
+    const currentMouseX = event.clientX - rect.left
+    const currentMouseY = event.clientY - rect.top
+
+    // Если курсор сильно сдвинулся — переустанавливаем якорь
+    const dist =
+      Math.hypot(
+        currentMouseX - wheelAnchorScreen.x,
+        currentMouseY - wheelAnchorScreen.y
+      )
+    if (!wheelAnchorActive || dist > 8) {
+      wheelAnchorActive = true
+      wheelAnchorScreen = { x: currentMouseX, y: currentMouseY }
+      wheelAnchorWorld = {
+        x: (currentMouseX - panX.value) / oldZoom,
+        y: (currentMouseY - panY.value) / oldZoom
+      }
+    }
+
+    // Для стабильности используем одну и ту же экранную точку и одну и ту же world‑точку
+    const mouseX = wheelAnchorScreen.x
+    const mouseY = wheelAnchorScreen.y
+    const worldX = wheelAnchorWorld.x
+    const worldY = wheelAnchorWorld.y
 
     if (debugZoom) {
       console.log('[WHEEL BEFORE]', {
