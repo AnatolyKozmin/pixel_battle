@@ -264,8 +264,11 @@ export function usePixelBattle(canvasRef) {
     const mouseX = event.clientX - rect.left
     const mouseY = event.clientY - rect.top
     
-    const worldX = mouseX / oldZoom
-    const worldY = mouseY / oldZoom
+    // Внутри canvas точка экрана описывается как:
+    // mouseX = panX + worldX * zoom
+    // => worldX = (mouseX - panX) / zoom
+    const worldX = (mouseX - panX.value) / oldZoom
+    const worldY = (mouseY - panY.value) / oldZoom
 
     if (debugZoom) {
       console.log('[WHEEL BEFORE]', {
@@ -369,8 +372,9 @@ export function usePixelBattle(canvasRef) {
       const centerY = centerClientY - rect.top
 
       // Мировые координаты точки под пальцами (до изменения zoom)
-      const worldX = centerX / oldZoom
-      const worldY = centerY / oldZoom
+      // centerX = panX + worldX * zoom  =>  worldX = (centerX - panX) / zoom
+      const worldX = (centerX - panX.value) / oldZoom
+      const worldY = (centerY - panY.value) / oldZoom
 
       if (debugZoom) {
         console.log('[PINCH BEFORE]', {
