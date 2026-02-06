@@ -255,34 +255,27 @@ export function usePixelBattle(canvasRef) {
     if (!canvas.value) return
     
     const delta = event.deltaY > 0 ? 0.9 : 1.1
-    const oldZoom = zoom.value
     const newZoom = Math.max(0.1, Math.min(10, zoom.value * delta))
     
-    // Получаем координаты курсора относительно viewport
-    const mouseX = event.clientX
-    const mouseY = event.clientY
-    
-    // Получаем позицию canvas в viewport (с учетом текущего transform)
+    // Зум к точке курсора
     const rect = canvas.value.getBoundingClientRect()
+    // Координаты курсора относительно верхнего левого угла canvas (уже с учетом translate/scale)
+    const mouseX = event.clientX - rect.left
+    const mouseY = event.clientY - rect.top
     
-    // Координаты курсора относительно canvas (с учетом текущего pan и zoom)
-    const canvasX = mouseX - rect.left
-    const canvasY = mouseY - rect.top
-    
-    // Мировые координаты точки под курсором (в координатах исходного canvas)
-    // canvasX = panX + worldX * oldZoom
-    // worldX = (canvasX - panX) / oldZoom
-    const worldX = (canvasX - panX.value) / oldZoom
-    const worldY = (canvasY - panY.value) / oldZoom
+    // worldX/worldY — координаты в «мире» холста (до CSS-transform)
+    // rect.width = CANVAS_WIDTH * zoom, поэтому mouseX = worldX * zoom
+    const worldX = mouseX / zoom.value
+    const worldY = mouseY / zoom.value
     
     // Обновляем zoom
     zoom.value = newZoom
     
     // Пересчитываем pan так, чтобы точка под курсором осталась на месте
-    // canvasX = panX + worldX * newZoom
-    // panX = canvasX - worldX * newZoom
-    panX.value = canvasX - worldX * newZoom
-    panY.value = canvasY - worldY * newZoom
+    // mouseX = worldX * zoom + panX, но rect.left уже содержит translate,
+    // поэтому мы двигаем только panX/panY относительно текущего zoom
+    panX.value = mouseX - worldX * zoom.value
+    panY.value = mouseY - worldY * zoom.value
     
     updateCanvasTransform()
   }
@@ -327,18 +320,44 @@ export function usePixelBattle(canvasRef) {
       lastPanPoint = { x: currentX, y: currentY }
       updateCanvasTransform()
     } else if (isPinching && event.touches.length === 2) {
-      // Pinch-to-zoom
+      // Pinch-to-zoom с сохранением точки под пальцами (как в картах)
       const touch1 = event.touches[0]
       const touch2 = event.touches[1]
       const distance = Math.hypot(
         touch2.clientX - touch1.clientX,
         touch2.clientY - touch1.clientY
       )
-      
+
+      if (!canvas.value || lastPinchDistance === 0) {
+        lastPinchDistance = distance
+        return
+      }
+
       const scale = distance / lastPinchDistance
-      zoom.value = Math.max(0.1, Math.min(10, zoom.value * scale))
+      const oldZoom = zoom.value
+      const newZoom = Math.max(0.1, Math.min(10, oldZoom * scale))
+
+      // Центр жеста между двумя пальцами в координатах viewport
+      const centerClientX = (touch1.clientX + touch2.clientX) / 2
+      const centerClientY = (touch1.clientY + touch2.clientY) / 2
+
+      // Переходим в координаты канваса
+      const rect = canvas.value.getBoundingClientRect()
+      const centerX = centerClientX - rect.left
+      const centerY = centerClientY - rect.top
+
+      // Мировые координаты точки под пальцами (до изменения zoom)
+      const worldX = centerX / oldZoom
+      const worldY = centerY / oldZoom
+
+      // Обновляем zoom
+      zoom.value = newZoom
+
+      // Пересчитываем pan так, чтобы центр жеста остался на месте
+      panX.value = centerX - worldX * newZoom
+      panY.value = centerY - worldY * newZoom
+
       lastPinchDistance = distance
-      
       updateCanvasTransform()
     }
   }
