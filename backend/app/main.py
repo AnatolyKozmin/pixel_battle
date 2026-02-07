@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.redis import init_redis, close_redis
 from app.api.routes import api_router
 from app.api.websocket import router as websocket_router
+from app.api.game_websocket import router as game_websocket_router
 from app.telegram.bot import setup_bot
 
 
@@ -79,6 +80,7 @@ app.add_middleware(
 # Подключение роутеров
 app.include_router(api_router, prefix="/api")
 app.include_router(websocket_router)
+app.include_router(game_websocket_router)
 
 
 @app.get("/")

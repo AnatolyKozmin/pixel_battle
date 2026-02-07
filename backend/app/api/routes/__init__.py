@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.routes import pixels, users, canvas, ai, webhooks
+from app.api.routes import pixels, users, canvas, ai, webhooks, games
 
 api_router = APIRouter()
 
@@ -8,3 +8,4 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(canvas.router, prefix="/canvas", tags=["canvas"])
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
+api_router.include_router(games.router, prefix="/games", tags=["games"])

@@ -12,7 +12,26 @@
       </div>
     </div>
     
-    <div class="canvas-container" ref="containerRef" style="overflow: hidden; position: relative;">
+    <!-- Переключатель режимов -->
+    <div class="mode-switcher">
+      <button 
+        @click="currentMode = 'canvas'" 
+        class="mode-btn"
+        :class="{ active: currentMode === 'canvas' }"
+      >
+        🎨 Холст
+      </button>
+      <button 
+        @click="currentMode = 'game'" 
+        class="mode-btn"
+        :class="{ active: currentMode === 'game' }"
+      >
+        🎮 Игра
+      </button>
+    </div>
+
+    <!-- Холст -->
+    <div v-if="currentMode === 'canvas'" class="canvas-container" ref="containerRef" style="overflow: hidden; position: relative;">
       <canvas
         ref="canvasRef"
         @click="handleCanvasClick"
@@ -36,6 +55,11 @@
         <span class="color-hex">{{ selectedColor }}</span>
       </div>
       
+    </div>
+
+    <!-- Игра -->
+    <div v-if="currentMode === 'game'" class="game-wrapper">
+      <Game :user="user" />
     </div>
     
     <!-- iOS-style Bottom Bar -->
@@ -76,6 +100,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { usePixelBattle } from './composables/usePixelBattle'
 import { useWebSocket } from './composables/useWebSocket'
 import { useAudio } from './composables/useAudio'
+import Game from './components/Game.vue'
 
 const canvasRef = ref(null)
 const containerRef = ref(null)
@@ -83,6 +108,7 @@ const selectedColor = ref('#FF0000')
 const user = ref(null)
 const canvasStats = ref(null)
 const isPanMode = ref(false) // Режим перемещения
+const currentMode = ref('canvas') // 'canvas' или 'game'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002'
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8002'
@@ -408,6 +434,37 @@ function resetView() {
 .canvas-pixels-count {
   color: var(--tg-theme-hint-color, #999999);
   font-size: 11px;
+}
+
+.mode-switcher {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: var(--tg-theme-header-bg-color, #ffffff);
+  border-bottom: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.mode-btn.active {
+  background: #007AFF;
+  color: white;
+  border-color: #007AFF;
+}
+
+.game-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 100px;
 }
 
 .canvas-container {
