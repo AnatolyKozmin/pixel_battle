@@ -156,7 +156,7 @@ async def submit_answer(
     # Проверяем правильность ответа
     is_correct = GameService.validate_sequence(request.sequence, game.sequence)
     
-        if is_correct:
+    if is_correct:
         # Переходим на следующий уровень
         game = await GameService.next_level(db, game_id)
         return {
