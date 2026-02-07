@@ -39,16 +39,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         db_user = await UserService.get_or_create_user(db, user_data)
         
-        await update.message.reply_text(
+        # Формируем сообщение
+        message_text = (
             f"Привет, {user.first_name or user.username or 'друг'}! 👋\n\n"
             f"Ты зарегистрирован в Pixel Battle!\n\n"
             f"📋 Доступные команды:\n"
             f"/my_teams - Мои команды\n"
             f"/create_team <название> - Создать команду\n"
             f"/join_team <код> - Присоединиться к команде\n"
-            f"/help - Справка по командам\n\n"
-            f"Используй кнопку ниже, чтобы открыть игру:",
-            reply_markup={
+            f"/help - Справка по командам"
+        )
+        
+        # Создаем кнопку только если URL установлен
+        reply_markup = None
+        if settings.TELEGRAM_WEBHOOK_URL:
+            message_text += "\n\nИспользуй кнопку ниже, чтобы открыть игру:"
+            reply_markup = {
                 "inline_keyboard": [[
                     {
                         "text": "🎨 Открыть игру",
@@ -56,6 +62,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     }
                 ]]
             }
+        
+        await update.message.reply_text(
+            message_text,
+            reply_markup=reply_markup
         )
         break
 
