@@ -2,6 +2,7 @@
 Модель пользователя
 """
 from sqlalchemy import Column, Integer, String, DateTime, BigInteger
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -17,3 +18,10 @@ class User(Base):
     pixels_placed = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_pixel_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Relationships
+    teams = relationship(
+        "Team",
+        secondary="team_members",
+        back_populates="members"
+    )
