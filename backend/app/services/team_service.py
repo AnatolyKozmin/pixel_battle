@@ -220,3 +220,29 @@ class TeamService:
             )
         )
         return result.first() is not None
+    
+    @staticmethod
+    async def get_all_teams(
+        db: AsyncSession
+    ) -> List[Team]:
+        """Получить все команды"""
+        result = await db.execute(select(Team))
+        return list(result.scalars().all())
+    
+    @staticmethod
+    async def get_teams_count(
+        db: AsyncSession
+    ) -> int:
+        """Получить количество команд"""
+        from sqlalchemy import func
+        result = await db.execute(select(func.count(Team.id)))
+        return result.scalar() or 0
+    
+    @staticmethod
+    async def get_total_members_count(
+        db: AsyncSession
+    ) -> int:
+        """Получить общее количество участников во всех командах"""
+        from sqlalchemy import func
+        result = await db.execute(select(func.count(team_members.c.user_id)))
+        return result.scalar() or 0

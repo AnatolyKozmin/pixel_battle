@@ -65,3 +65,37 @@ class UserService:
             user = await UserService.create_user(db, user_data)
         
         return user
+    
+    @staticmethod
+    async def get_all_users(
+        db: AsyncSession
+    ) -> list[User]:
+        """Получить всех пользователей"""
+        result = await db.execute(select(User))
+        return list(result.scalars().all())
+    
+    @staticmethod
+    async def get_users_count(
+        db: AsyncSession
+    ) -> int:
+        """Получить количество пользователей"""
+        from sqlalchemy import func
+        result = await db.execute(select(func.count(User.id)))
+        return result.scalar() or 0
+    
+    @staticmethod
+    async def get_active_users_count(
+        db: AsyncSession,
+        days: int = 30
+    ) -> int:
+        """Получить количество активных пользователей за последние N дней"""
+        from sqlalchemy import func
+        from datetime import datetime, timedelta, timezone
+        
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        result = await db.execute(
+            select(func.count(User.id)).where(
+                User.last_pixel_at >= cutoff_date
+            )
+        )
+        return result.scalar() or 0

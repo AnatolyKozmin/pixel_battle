@@ -4,12 +4,14 @@ Telegram Bot для авторизации, уведомлений и работ
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.services.user_service import UserService
 from app.schemas.user import UserCreate
 from app.services.team_service import TeamService
+from app.services.pixel_service import PixelService
 
 
 async def get_db():
@@ -402,6 +404,182 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         break
 
 
+# ID админа
+ADMIN_TELEGRAM_ID = 922109605
+
+
+def is_admin(telegram_id: int) -> bool:
+    """Проверить, является ли пользователь админом"""
+    return telegram_id == ADMIN_TELEGRAM_ID
+
+
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /admin - статистика для админа"""
+    user = update.effective_user
+    if not user:
+        await update.message.reply_text("Ошибка: не удалось получить информацию о пользователе")
+        return
+    
+    # Проверка прав админа
+    if not is_admin(user.id):
+        await update.message.reply_text("❌ У тебя нет прав для выполнения этой команды")
+        return
+    
+    async for db in get_db():
+        try:
+            # Статистика пользователей
+            total_users = await UserService.get_users_count(db)
+            active_users_30d = await UserService.get_active_users_count(db, days=30)
+            active_users_7d = await UserService.get_active_users_count(db, days=7)
+            
+            # Статистика команд
+            total_teams = await TeamService.get_teams_count(db)
+            total_members = await TeamService.get_total_members_count(db)
+            
+            # Статистика пикселей
+            total_pixels = await PixelService.get_pixels_count(db)
+            
+            # Получаем топ пользователей по пикселям
+            from sqlalchemy import select, desc
+            from app.models.user import User
+            top_users_result = await db.execute(
+                select(User)
+                .order_by(desc(User.pixels_placed))
+                .limit(5)
+            )
+            top_users = list(top_users_result.scalars().all())
+            
+            # Формируем сообщение
+            message = "📊 <b>Статистика Pixel Battle</b>\n\n"
+            
+            message += "👥 <b>Пользователи:</b>\n"
+            message += f"   Всего: {total_users}\n"
+            message += f"   Активных за 30 дней: {active_users_30d}\n"
+            message += f"   Активных за 7 дней: {active_users_7d}\n\n"
+            
+            message += "👥 <b>Команды:</b>\n"
+            message += f"   Всего команд: {total_teams}\n"
+            message += f"   Всего участников: {total_members}\n"
+            if total_teams > 0:
+                avg_members = total_members / total_teams
+                message += f"   Среднее участников: {avg_members:.1f}\n"
+            message += "\n"
+            
+            message += "🎨 <b>Холст:</b>\n"
+            message += f"   Всего пикселей: {total_pixels}\n"
+            canvas_size = settings.CANVAS_WIDTH * settings.CANVAS_HEIGHT
+            coverage = (total_pixels / canvas_size * 100) if canvas_size > 0 else 0
+            message += f"   Заполнено: {coverage:.2f}%\n\n"
+            
+            if top_users:
+                message += "🏆 <b>Топ-5 пользователей:</b>\n"
+                for i, top_user in enumerate(top_users, 1):
+                    name = top_user.first_name or top_user.username or "Неизвестно"
+                    message += f"   {i}. {name}: {top_user.pixels_placed} пикселей\n"
+            
+            await update.message.reply_text(message, parse_mode="HTML")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка при получении статистики: {str(e)}")
+            print(f"Admin stats error: {e}")
+        break
+
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /broadcast - рассылка всем пользователям"""
+    user = update.effective_user
+    if not user:
+        await update.message.reply_text("Ошибка: не удалось получить информацию о пользователе")
+        return
+    
+    # Проверка прав админа
+    if not is_admin(user.id):
+        await update.message.reply_text("❌ У тебя нет прав для выполнения этой команды")
+        return
+    
+    # Получаем сообщение для рассылки
+    if not context.args or len(context.args) == 0:
+        await update.message.reply_text(
+            "❌ Укажи сообщение для рассылки!\n\n"
+            "Пример: /broadcast Привет всем! Это тестовая рассылка."
+        )
+        return
+    
+    message_text = " ".join(context.args)
+    
+    # Подтверждение
+    await update.message.reply_text(
+        f"📢 <b>Подтверждение рассылки</b>\n\n"
+        f"Сообщение:\n{message_text}\n\n"
+        f"Отправь /confirm_broadcast для подтверждения или /cancel для отмены.",
+        parse_mode="HTML"
+    )
+    
+    # Сохраняем сообщение в контексте для подтверждения
+    context.user_data['pending_broadcast'] = message_text
+
+
+async def confirm_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Подтверждение рассылки"""
+    user = update.effective_user
+    if not user or not is_admin(user.id):
+        await update.message.reply_text("❌ У тебя нет прав для выполнения этой команды")
+        return
+    
+    message_text = context.user_data.get('pending_broadcast')
+    if not message_text:
+        await update.message.reply_text("❌ Нет сообщения для рассылки. Используй /broadcast сначала.")
+        return
+    
+    await update.message.reply_text("📤 Начинаю рассылку...")
+    
+    async for db in get_db():
+        try:
+            # Получаем всех пользователей
+            all_users = await UserService.get_all_users(db)
+            total = len(all_users)
+            sent = 0
+            failed = 0
+            
+            for db_user in all_users:
+                try:
+                    # Отправляем сообщение через бота
+                    await context.bot.send_message(
+                        chat_id=db_user.telegram_id,
+                        text=message_text
+                    )
+                    sent += 1
+                except Exception as e:
+                    failed += 1
+                    print(f"Failed to send to {db_user.telegram_id}: {e}")
+                    # Небольшая задержка между сообщениями, чтобы не превысить лимиты
+                    await asyncio.sleep(0.05)
+            
+            # Удаляем pending сообщение
+            context.user_data.pop('pending_broadcast', None)
+            
+            await update.message.reply_text(
+                f"✅ <b>Рассылка завершена!</b>\n\n"
+                f"Всего пользователей: {total}\n"
+                f"Отправлено: {sent}\n"
+                f"Ошибок: {failed}",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка при рассылке: {str(e)}")
+            print(f"Broadcast error: {e}")
+        break
+
+
+async def cancel_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена рассылки"""
+    user = update.effective_user
+    if not user or not is_admin(user.id):
+        return
+    
+    context.user_data.pop('pending_broadcast', None)
+    await update.message.reply_text("❌ Рассылка отменена")
+
+
 def setup_bot():
     """Настройка и запуск бота"""
     if not settings.TELEGRAM_BOT_TOKEN:
@@ -423,5 +601,11 @@ def setup_bot():
     application.add_handler(CommandHandler("team_members", team_members))
     application.add_handler(CommandHandler("leave_team", leave_team))
     application.add_handler(CommandHandler("delete_team", delete_team))
+    
+    # Админские команды
+    application.add_handler(CommandHandler("admin", admin_stats))
+    application.add_handler(CommandHandler("broadcast", broadcast))
+    application.add_handler(CommandHandler("confirm_broadcast", confirm_broadcast))
+    application.add_handler(CommandHandler("cancel", cancel_broadcast))
     
     return application

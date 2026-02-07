@@ -107,6 +107,15 @@ class PixelService:
             await db.commit()
     
     @staticmethod
+    async def get_pixels_count(
+        db: AsyncSession
+    ) -> int:
+        """Получить общее количество пикселей на холсте"""
+        from sqlalchemy import func
+        result = await db.execute(select(func.count(Pixel.id)))
+        return result.scalar() or 0
+    
+    @staticmethod
     async def get_canvas_cache_key() -> str:
         """Получить ключ кеша для всего холста"""
         return "canvas:full"
