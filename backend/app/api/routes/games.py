@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.telegram.auth import get_current_user
 from app.services.game_service import GameService
-from app.models.game import GameMode
+from app.models.game import GameMode, GameStatus
 
 router = APIRouter()
 
@@ -55,7 +55,7 @@ class LeaderboardEntry(BaseModel):
     first_achieved: str
 
 
-@router.post("/games/create", response_model=GameResponse)
+@router.post("/create", response_model=GameResponse)
 async def create_game(
     request: GameCreateRequest,
     db: AsyncSession = Depends(get_db),
@@ -85,7 +85,7 @@ async def create_game(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/games/join", response_model=GameResponse)
+@router.post("/join", response_model=GameResponse)
 async def join_game(
     request: GameJoinRequest,
     db: AsyncSession = Depends(get_db),
@@ -103,13 +103,14 @@ async def join_game(
         mode=game.mode.value,
         status=game.status.value,
         current_level=game.current_level,
+        grid_size=game.grid_size,
         sequence=game.sequence,
         player1_id=game.player1_id,
         player2_id=game.player2_id
     )
 
 
-@router.get("/games/{game_code}", response_model=GameResponse)
+@router.get("/{game_code}", response_model=GameResponse)
 async def get_game(
     game_code: str,
     db: AsyncSession = Depends(get_db),
@@ -131,13 +132,14 @@ async def get_game(
         mode=game.mode.value,
         status=game.status.value,
         current_level=game.current_level,
+        grid_size=game.grid_size,
         sequence=game.sequence,
         player1_id=game.player1_id,
         player2_id=game.player2_id
     )
 
 
-@router.post("/games/{game_id}/answer")
+@router.post("/{game_id}/answer")
 async def submit_answer(
     game_id: int,
     request: GameAnswerRequest,
@@ -150,7 +152,7 @@ async def submit_answer(
     if not game:
         raise HTTPException(status_code=404, detail="Игра не найдена")
     
-    if game.status.value != "in_progress":
+    if game.status != GameStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Игра не активна")
     
     # Проверяем правильность ответа
@@ -176,7 +178,7 @@ async def submit_answer(
         }
 
 
-@router.post("/games/{game_id}/finish", response_model=GameResultResponse)
+@router.post("/{game_id}/finish", response_model=GameResultResponse)
 async def finish_game(
     game_id: int,
     level_reached: int,
@@ -204,7 +206,7 @@ async def finish_game(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/games/leaderboard", response_model=List[LeaderboardEntry])
+@router.get("/leaderboard", response_model=List[LeaderboardEntry])
 async def get_leaderboard(
     limit: int = 10,
     db: AsyncSession = Depends(get_db)
