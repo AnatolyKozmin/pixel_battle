@@ -23,7 +23,7 @@ axiosInstance.interceptors.response.use(
   }
 )
 
-export function usePixelBattle(canvasRef) {
+export function usePixelBattle(canvasRef, containerRef) {
   const zoom = ref(1)
   const panX = ref(0)
   const panY = ref(0)
@@ -264,40 +264,47 @@ export function usePixelBattle(canvasRef) {
     const delta = event.deltaY > 0 ? 0.9 : 1.1
     const newZoom = Math.max(0.1, Math.min(10, oldZoom * delta))
     
-    const rect = canvas.value.getBoundingClientRect()
-    const currentMouseX = event.clientX - rect.left
-    const currentMouseY = event.clientY - rect.top
+    // Получаем координаты относительно контейнера (без transform)
+    const container = containerRef?.value || canvas.value.parentElement
+    if (!container) return
+    
+    const containerRect = container.getBoundingClientRect()
+    const mouseX = event.clientX - containerRect.left
+    const mouseY = event.clientY - containerRect.top
 
     // Если курсор сильно сдвинулся — переустанавливаем якорь
-    const dist =
-      Math.hypot(
-        currentMouseX - wheelAnchorScreen.x,
-        currentMouseY - wheelAnchorScreen.y
-      )
+    const dist = Math.hypot(
+      mouseX - wheelAnchorScreen.x,
+      mouseY - wheelAnchorScreen.y
+    )
+    
     if (!wheelAnchorActive || dist > 8) {
       wheelAnchorActive = true
-      wheelAnchorScreen = { x: currentMouseX, y: currentMouseY }
+      wheelAnchorScreen = { x: mouseX, y: mouseY }
+      // Мировые координаты: screen = pan + world * zoom => world = (screen - pan) / zoom
       wheelAnchorWorld = {
-        x: (currentMouseX - panX.value) / oldZoom,
-        y: (currentMouseY - panY.value) / oldZoom
+        x: (mouseX - panX.value) / oldZoom,
+        y: (mouseY - panY.value) / oldZoom
       }
     }
 
-    // Для стабильности используем одну и ту же экранную точку и одну и ту же world‑точку
-    const mouseX = wheelAnchorScreen.x
-    const mouseY = wheelAnchorScreen.y
-    const worldX = wheelAnchorWorld.x
-    const worldY = wheelAnchorWorld.y
+    // Используем зафиксированные координаты якоря для стабильности
+    const anchorScreenX = wheelAnchorScreen.x
+    const anchorScreenY = wheelAnchorScreen.y
+    const anchorWorldX = wheelAnchorWorld.x
+    const anchorWorldY = wheelAnchorWorld.y
 
     if (debugZoom) {
       console.log('[WHEEL BEFORE]', {
         clientX: event.clientX,
         clientY: event.clientY,
-        rect,
+        containerRect,
         mouseX,
         mouseY,
-        worldX,
-        worldY,
+        anchorScreenX,
+        anchorScreenY,
+        anchorWorldX,
+        anchorWorldY,
         panX: panX.value,
         panY: panY.value,
         zoom: oldZoom
@@ -306,15 +313,17 @@ export function usePixelBattle(canvasRef) {
     
     zoom.value = newZoom
     
-    panX.value = mouseX - worldX * zoom.value
-    panY.value = mouseY - worldY * zoom.value
+    // Пересчитываем pan так, чтобы точка под якорем осталась на месте
+    // screen = pan + world * zoom => pan = screen - world * zoom
+    panX.value = anchorScreenX - anchorWorldX * newZoom
+    panY.value = anchorScreenY - anchorWorldY * newZoom
 
     if (debugZoom) {
       console.log('[WHEEL AFTER]', {
-        mouseX,
-        mouseY,
-        worldX,
-        worldY,
+        anchorScreenX,
+        anchorScreenY,
+        anchorWorldX,
+        anchorWorldY,
         panX: panX.value,
         panY: panY.value,
         zoom: zoom.value
@@ -385,13 +394,19 @@ export function usePixelBattle(canvasRef) {
       const centerClientX = (touch1.clientX + touch2.clientX) / 2
       const centerClientY = (touch1.clientY + touch2.clientY) / 2
 
-      // Переходим в координаты канваса
-      const rect = canvas.value.getBoundingClientRect()
-      const centerX = centerClientX - rect.left
-      const centerY = centerClientY - rect.top
+      // Переходим в координаты контейнера (без transform)
+      const container = containerRef?.value || canvas.value.parentElement
+      if (!container) {
+        lastPinchDistance = distance
+        return
+      }
+      
+      const containerRect = container.getBoundingClientRect()
+      const centerX = centerClientX - containerRect.left
+      const centerY = centerClientY - containerRect.top
 
       // Мировые координаты точки под пальцами (до изменения zoom)
-      // centerX = panX + worldX * zoom  =>  worldX = (centerX - panX) / zoom
+      // screen = pan + world * zoom => world = (screen - pan) / zoom
       const worldX = (centerX - panX.value) / oldZoom
       const worldY = (centerY - panY.value) / oldZoom
 
@@ -401,7 +416,7 @@ export function usePixelBattle(canvasRef) {
           touch2: { x: touch2.clientX, y: touch2.clientY },
           centerClientX,
           centerClientY,
-          rect,
+          containerRect,
           centerX,
           centerY,
           worldX,
@@ -418,6 +433,7 @@ export function usePixelBattle(canvasRef) {
       zoom.value = newZoom
 
       // Пересчитываем pan так, чтобы центр жеста остался на месте
+      // screen = pan + world * zoom => pan = screen - world * zoom
       panX.value = centerX - worldX * newZoom
       panY.value = centerY - worldY * newZoom
 

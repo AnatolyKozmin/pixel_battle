@@ -12,7 +12,7 @@
       </div>
     </div>
     
-    <div class="canvas-container" style="overflow: hidden; position: relative;">
+    <div class="canvas-container" ref="containerRef" style="overflow: hidden; position: relative;">
       <canvas
         ref="canvasRef"
         @click="handleCanvasClick"
@@ -78,6 +78,7 @@ import { useWebSocket } from './composables/useWebSocket'
 import { useAudio } from './composables/useAudio'
 
 const canvasRef = ref(null)
+const containerRef = ref(null)
 const selectedColor = ref('#FF0000')
 const user = ref(null)
 const canvasStats = ref(null)
@@ -105,7 +106,7 @@ const {
   pixels: canvasPixels,
   showGrid,
   updateCanvasTransform
-} = usePixelBattle(canvasRef)
+} = usePixelBattle(canvasRef, containerRef)
 
 // Функция для перезагрузки холста
 const reloadCanvas = () => loadCanvas(API_URL)
