@@ -130,14 +130,9 @@
         </div>
       </div>
 
-      <div class="game-status">
-        <div v-if="pixelsPlaced >= pixelsToPlace && gameStatus !== 'finished'" class="status-message">
+      <div class="game-status" v-if="gameStatus !== 'finished'">
+        <div v-if="pixelsPlaced >= pixelsToPlace" class="status-message">
           Ожидание оппонента...
-        </div>
-        <div v-else-if="gameStatus === 'finished'" class="status-message">
-          <span v-if="winnerId === getUserId()">🎉 Вы победили!</span>
-          <span v-else-if="winnerId && winnerId !== getUserId()">😔 Вы проиграли</span>
-          <span v-else>🤝 Ничья!</span>
         </div>
         <div v-else class="status-message">
           Поставь {{ pixelsToPlace - pixelsPlaced }} пикселей
@@ -148,10 +143,36 @@
     <!-- Результат игры -->
     <div v-if="gameStatus === 'finished'" class="game-result">
       <h3>Игра окончена!</h3>
-      <p>Достигнутый уровень: {{ finalLevel }}</p>
-      <button @click="resetGame" class="game-btn primary">
-        Играть снова
-      </button>
+      
+      <!-- Для SOLO режима -->
+      <div v-if="game?.mode === 'solo'">
+        <p>Достигнутый уровень: {{ finalLevel }}</p>
+      </div>
+      
+      <!-- Для PvP режима -->
+      <div v-if="game?.mode === 'pvp'">
+        <div v-if="winnerId && winnerId === getUserId()" class="result-message win">
+          🎉 Вы победили!
+        </div>
+        <div v-else-if="winnerId && winnerId !== getUserId()" class="result-message lose">
+          😔 Вы проиграли
+        </div>
+        <div v-else class="result-message draw">
+          🤝 Ничья!
+        </div>
+        <p class="result-stats">
+          Вы поставили: {{ pixelsPlaced }} / {{ pixelsToPlace }} пикселей
+        </p>
+      </div>
+      
+      <div class="result-actions">
+        <button @click="resetGame" class="game-btn primary">
+          Играть снова
+        </button>
+        <button @click="goToMainMenu" class="game-btn">
+          В главное меню
+        </button>
+      </div>
     </div>
 
     <!-- Лидерборд -->
@@ -569,6 +590,11 @@ function resetGame() {
   }
 }
 
+function goToMainMenu() {
+  resetGame()
+  // gameStatus уже будет 'idle' после resetGameComposable()
+}
+
 onMounted(() => {
   // Можно загрузить лидерборд заранее
   // loadLeaderboard()
@@ -802,10 +828,50 @@ onUnmounted(() => {
 .game-result {
   text-align: center;
   padding: 40px 20px;
+  background: #f5f5f5;
+  border-radius: 12px;
+  margin: 20px 0;
 }
 
 .game-result h3 {
   margin-bottom: 20px;
+  font-size: 24px;
+}
+
+.result-message {
+  font-size: 20px;
+  font-weight: bold;
+  margin: 20px 0;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.result-message.win {
+  color: #34C759;
+  background: rgba(52, 199, 89, 0.1);
+}
+
+.result-message.lose {
+  color: #FF3B30;
+  background: rgba(255, 59, 48, 0.1);
+}
+
+.result-message.draw {
+  color: #FF9500;
+  background: rgba(255, 149, 0, 0.1);
+}
+
+.result-stats {
+  color: #666;
+  margin: 15px 0;
+  font-size: 16px;
+}
+
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 30px;
 }
 
 .leaderboard {
