@@ -152,6 +152,36 @@ async def game_websocket_endpoint(
                         exclude_ws=websocket
                     )
                 
+                elif message_type == "pixel_placed":
+                    # Игрок разместил пиксель (для новой механики PvP)
+                    # Отправляем оппоненту информацию о размещенном пикселе
+                    await broadcast_to_game(
+                        game_id,
+                        {
+                            "type": "pixel_placed",
+                            "user_id": user_id,
+                            "x": message.get("x"),
+                            "y": message.get("y"),
+                            "color": message.get("color"),
+                            "timestamp": message.get("timestamp"),
+                            "pixels_placed": message.get("pixels_placed"),
+                            "pixels_remaining": message.get("pixels_remaining")
+                        },
+                        exclude_ws=websocket
+                    )
+                
+                elif message_type == "game_finished":
+                    # Игра завершена (для новой механики PvP)
+                    await broadcast_to_game(
+                        game_id,
+                        {
+                            "type": "game_finished",
+                            "winner_id": message.get("winner_id"),
+                            "user_id": user_id
+                        },
+                        exclude_ws=websocket
+                    )
+                
             except WebSocketDisconnect:
                 break
             except json.JSONDecodeError:

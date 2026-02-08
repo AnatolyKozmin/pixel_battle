@@ -26,6 +26,12 @@ class GameAnswerRequest(BaseModel):
     sequence: List[dict]  # [{"x": 0, "y": 0}, ...]
 
 
+class PlacePixelRequest(BaseModel):
+    x: int
+    y: int
+    color: str  # Hex цвет, например "#FF0000"
+
+
 class GameResponse(BaseModel):
     id: int
     code: str
@@ -36,6 +42,10 @@ class GameResponse(BaseModel):
     sequence: Optional[List[dict]] = None
     player1_id: int
     player2_id: Optional[int] = None
+    pixels_to_place: Optional[int] = None  # Для PvP
+    player1_pixels: Optional[List[dict]] = None  # Для PvP
+    player2_pixels: Optional[List[dict]] = None  # Для PvP
+    winner_id: Optional[int] = None  # Для PvP
 
 
 class GameResultResponse(BaseModel):
@@ -79,8 +89,66 @@ async def create_game(
             grid_size=game.grid_size,
             sequence=game.sequence,
             player1_id=game.player1_id,
-            player2_id=game.player2_id
+            player2_id=game.player2_id,
+            pixels_to_place=game.pixels_to_place,
+            player1_pixels=game.player1_pixels,
+            player2_pixels=game.player2_pixels,
+            winner_id=game.winner_id
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/queue")
+async def join_queue(
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
+):
+    """
+    Войти в очередь ожидания для PvP игры.
+    Если есть другой игрок в очереди, автоматически создаёт игру.
+    """
+    try:
+        game = await GameService.join_pvp_queue(db, current_user_id)
+        
+        if game:
+            # Нашли пару, игра создана
+            return {
+                "status": "matched",
+                "game": GameResponse(
+                    id=game.id,
+                    code=game.code,
+                    mode=game.mode.value,
+                    status=game.status.value,
+                    current_level=game.current_level,
+                    grid_size=game.grid_size,
+                    sequence=game.sequence,
+                    player1_id=game.player1_id,
+                    player2_id=game.player2_id,
+                    pixels_to_place=game.pixels_to_place,
+                    player1_pixels=game.player1_pixels,
+                    player2_pixels=game.player2_pixels,
+                    winner_id=game.winner_id
+                )
+            }
+        else:
+            # В очереди, ждём пару
+            return {
+                "status": "waiting",
+                "message": "Ожидание соперника..."
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/queue/leave")
+async def leave_queue(
+    current_user_id: int = Depends(get_current_user)
+):
+    """Покинуть очередь ожидания"""
+    try:
+        await GameService.leave_pvp_queue(current_user_id)
+        return {"status": "left", "message": "Вы покинули очередь"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -91,7 +159,7 @@ async def join_game(
     db: AsyncSession = Depends(get_db),
     current_user_id: int = Depends(get_current_user)
 ):
-    """Присоединиться к PvP игре"""
+    """Присоединиться к PvP игре по коду"""
     game = await GameService.join_pvp_game(db, request.code, current_user_id)
     
     if not game:
@@ -106,7 +174,11 @@ async def join_game(
         grid_size=game.grid_size,
         sequence=game.sequence,
         player1_id=game.player1_id,
-        player2_id=game.player2_id
+        player2_id=game.player2_id,
+        pixels_to_place=game.pixels_to_place,
+        player1_pixels=game.player1_pixels,
+        player2_pixels=game.player2_pixels,
+        winner_id=game.winner_id
     )
 
 
@@ -225,3 +297,23 @@ async def get_leaderboard(
         )
         for entry in leaderboard
     ]
+
+
+@router.post("/{game_id}/place-pixel")
+async def place_pixel(
+    game_id: int,
+    request: PlacePixelRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user)
+):
+    """Разместить пиксель в PvP игре"""
+    try:
+        result = await GameService.place_pvp_pixel(
+            db, game_id, current_user_id,
+            request.x, request.y, request.color
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

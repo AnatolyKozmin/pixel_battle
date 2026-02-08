@@ -23,8 +23,11 @@
 
     <!-- PvP меню -->
     <div v-if="showPvPMenu" class="pvp-menu">
-      <button @click="createPvPGame" class="game-btn primary">
-        Создать игру
+      <button @click="findOpponent" class="game-btn primary">
+        🔍 Найти соперника
+      </button>
+      <button @click="createPvPGame" class="game-btn secondary">
+        Создать игру (по коду)
       </button>
       <div class="join-section">
         <input 
@@ -42,8 +45,17 @@
       </button>
     </div>
 
-    <!-- Игровое поле -->
-    <div v-if="gameStatus === 'playing'" class="game-board">
+    <!-- Ожидание в очереди -->
+    <div v-if="gameStatus === 'waiting_queue'" class="waiting-queue">
+      <h3>🔍 Поиск соперника...</h3>
+      <p>Ожидание другого игрока в очереди</p>
+      <button @click="leaveQueue" class="game-btn">
+        Отменить поиск
+      </button>
+    </div>
+
+    <!-- Игровое поле для SOLO режима -->
+    <div v-if="gameStatus === 'playing' && game?.mode === 'solo'" class="game-board">
       <div 
         class="grid" 
         :class="`grid-${gridSize}`"
@@ -76,6 +88,56 @@
         </div>
         <div v-else class="status-message">
           Готовься...
+        </div>
+      </div>
+    </div>
+
+    <!-- Игровое поле для PvP режима -->
+    <div v-if="gameStatus === 'playing' && game?.mode === 'pvp'" class="game-board pvp-board">
+      <div class="pvp-info">
+        <div class="pixels-counter">
+          Пикселей осталось: <strong>{{ pixelsToPlace - pixelsPlaced }}</strong> / {{ pixelsToPlace }}
+        </div>
+        <div class="color-picker-pvp">
+          <input type="color" v-model="selectedColor" />
+          <span>{{ selectedColor }}</span>
+        </div>
+      </div>
+      
+      <div 
+        class="grid grid-pvp" 
+      >
+        <div
+          v-for="(row, y) in gridSize"
+          :key="`row-${y}`"
+          class="grid-row"
+        >
+          <div
+            v-for="(col, x) in gridSize"
+            :key="`cell-${x}-${y}`"
+            class="grid-cell pvp-cell"
+            :class="{
+              'my-pixel': isMyPixel(x, y),
+              'opponent-pixel': isOpponentPixel(x, y),
+              'disabled': pixelsPlaced >= pixelsToPlace || gameStatus === 'finished'
+            }"
+            :style="getCellStyle(x, y)"
+            @click="handlePvPCellClick(x, y)"
+          ></div>
+        </div>
+      </div>
+
+      <div class="game-status">
+        <div v-if="pixelsPlaced >= pixelsToPlace && gameStatus !== 'finished'" class="status-message">
+          Ожидание оппонента...
+        </div>
+        <div v-else-if="gameStatus === 'finished'" class="status-message">
+          <span v-if="winnerId === getUserId()">🎉 Вы победили!</span>
+          <span v-else-if="winnerId && winnerId !== getUserId()">😔 Вы проиграли</span>
+          <span v-else>🤝 Ничья!</span>
+        </div>
+        <div v-else class="status-message">
+          Поставь {{ pixelsToPlace - pixelsPlaced }} пикселей
         </div>
       </div>
     </div>
@@ -136,8 +198,19 @@ const {
   isWaitingForInput,
   gameStatus,
   error,
+  // PvP режим
+  pixelsToPlace,
+  pixelsPlaced,
+  opponentPixels,
+  myPixels,
+  isInQueue,
+  winnerId,
+  // Методы
   createGame,
   joinGame,
+  joinQueue,
+  leaveQueue,
+  placePixel,
   submitAnswer,
   finishGame,
   getLeaderboard,
@@ -156,6 +229,8 @@ const leaderboard = ref([])
 const finalLevel = ref(1)
 const highlightedCell = ref(null)
 const clickedCells = ref(new Set())
+const selectedColor = ref('#FF0000') // Цвет по умолчанию для PvP
+const opponentPixelsDisplayed = ref([]) // Пиксели оппонента для отображения (с задержкой)
 
 // Получить ID пользователя
 function getUserId() {
@@ -180,6 +255,22 @@ async function startSoloGame() {
   }
 }
 
+async function findOpponent() {
+  try {
+    const result = await joinQueue()
+    if (result.matched) {
+      // Нашли пару, игра началась
+      setupPvPWebSocket()
+    } else {
+      // В очереди, ждём
+      showPvPMenu.value = false
+    }
+  } catch (err) {
+    console.error('Ошибка поиска соперника:', err)
+    alert('Не удалось найти соперника. Попробуйте позже.')
+  }
+}
+
 async function createPvPGame() {
   try {
     const gameData = await createGame('pvp')
@@ -194,7 +285,9 @@ async function createPvPGame() {
     const unsubscribe = onGameMessage((message) => {
       if (message.type === 'player_connected') {
         // Второй игрок подключился, начинаем игру
-        startLevel()
+        if (game.value?.mode === 'solo') {
+          startLevel()
+        }
         unsubscribe()
       }
     })
@@ -211,14 +304,12 @@ async function joinPvPGame() {
   
   try {
     const gameData = await joinGame(joinCode.value.toUpperCase())
-    // Подключаемся к WebSocket
-    const telegramId = getUserId()
-    connectGameWebSocket(gameData.id, telegramId)
     
-    // Уведомляем, что готовы
-    // Игра начнётся автоматически, когда оба игрока будут готовы
-    
-    await startLevel()
+    if (gameData.mode === 'pvp') {
+      setupPvPWebSocket()
+    } else {
+      await startLevel()
+    }
   } catch (err) {
     console.error('Ошибка присоединения к игре:', err)
     alert('Не удалось присоединиться к игре. Проверьте код.')
@@ -310,6 +401,97 @@ function isCellClicked(x, y) {
   return clickedCells.value.has(`${x}-${y}`)
 }
 
+// Определяем, кто мы (player1 или player2)
+function getMyPlayerNumber() {
+  if (!game.value || !props.user) return 1
+  // Сравниваем user.id с player1_id и player2_id
+  const userId = props.user.id
+  if (game.value.player1_id === userId) return 1
+  if (game.value.player2_id === userId) return 2
+  return 1 // По умолчанию player1
+}
+
+// PvP режим функции
+function isMyPixel(x, y) {
+  return myPixels.value.some(p => p.x === x && p.y === y)
+}
+
+function isOpponentPixel(x, y) {
+  return opponentPixelsDisplayed.value.some(p => p.x === x && p.y === y)
+}
+
+function getCellStyle(x, y) {
+  const myPixel = myPixels.value.find(p => p.x === x && p.y === y)
+  const opponentPixel = opponentPixelsDisplayed.value.find(p => p.x === x && p.y === y)
+  
+  if (myPixel) {
+    return { backgroundColor: myPixel.color }
+  } else if (opponentPixel) {
+    return { backgroundColor: opponentPixel.color }
+  }
+  return {}
+}
+
+async function handlePvPCellClick(x, y) {
+  if (pixelsPlaced.value >= pixelsToPlace.value || gameStatus.value === 'finished') {
+    return
+  }
+  
+  // Проверяем, не занята ли уже клетка
+  if (isMyPixel(x, y) || isOpponentPixel(x, y)) {
+    return
+  }
+  
+  try {
+    await placePixel(x, y, selectedColor.value)
+  } catch (err) {
+    console.error('Ошибка размещения пикселя:', err)
+    alert(err.response?.data?.detail || 'Не удалось разместить пиксель')
+  }
+}
+
+function setupPvPWebSocket() {
+  // Обновляем пиксели на основе того, кто мы
+  if (game.value) {
+    const playerNum = getMyPlayerNumber()
+    if (playerNum === 1) {
+      myPixels.value = game.value.player1_pixels || []
+      opponentPixels.value = game.value.player2_pixels || []
+    } else {
+      myPixels.value = game.value.player2_pixels || []
+      opponentPixels.value = game.value.player1_pixels || []
+    }
+    pixelsPlaced.value = myPixels.value.length
+    
+    // Инициализируем отображение пикселей оппонента
+    opponentPixelsDisplayed.value = [...opponentPixels.value]
+  }
+  
+  // Обрабатываем сообщения о размещении пикселей оппонента
+  onGameMessage((message) => {
+    if (message.type === 'pixel_placed') {
+      const playerNum = getMyPlayerNumber()
+      const isMyMessage = (playerNum === 1 && game.value?.player1_id === message.user_id) ||
+                          (playerNum === 2 && game.value?.player2_id === message.user_id)
+      
+      if (!isMyMessage) {
+        // Оппонент разместил пиксель - добавляем с задержкой для визуального эффекта
+        setTimeout(() => {
+          opponentPixelsDisplayed.value.push({
+            x: message.x,
+            y: message.y,
+            color: message.color,
+            timestamp: message.timestamp
+          })
+        }, 500) // Задержка 500ms для показа порядка размещения
+      }
+    } else if (message.type === 'game_finished') {
+      gameStatus.value = 'finished'
+      winnerId.value = message.winner_id
+    }
+  })
+}
+
 async function loadLeaderboard() {
   try {
     leaderboard.value = await getLeaderboard(10)
@@ -323,6 +505,8 @@ function resetGame() {
   showPvPMenu.value = false
   showLeaderboard.value = false
   joinCode.value = ''
+  opponentPixelsDisplayed.value = []
+  selectedColor.value = '#FF0000'
 }
 
 onMounted(() => {
@@ -454,6 +638,69 @@ onUnmounted(() => {
 .grid-5 .grid-cell {
   width: 40px;
   height: 40px;
+}
+
+.grid-pvp .grid-cell {
+  width: 30px;
+  height: 30px;
+}
+
+.pvp-cell.my-pixel {
+  border: 2px solid #007AFF;
+}
+
+.pvp-cell.opponent-pixel {
+  border: 2px solid #34C759;
+  animation: pixelAppear 0.3s ease-in;
+}
+
+@keyframes pixelAppear {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.pvp-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding: 10px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.pixels-counter {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.color-picker-pvp {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.color-picker-pvp input[type="color"] {
+  width: 40px;
+  height: 40px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.waiting-queue {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.waiting-queue h3 {
+  margin-bottom: 20px;
 }
 
 .grid-cell:hover:not(.disabled) {

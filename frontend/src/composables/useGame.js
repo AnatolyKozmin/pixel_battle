@@ -13,8 +13,16 @@ export function useGame() {
   const userSequence = ref([])
   const isShowingSequence = ref(false)
   const isWaitingForInput = ref(false)
-  const gameStatus = ref('idle') // idle, playing, finished
+  const gameStatus = ref('idle') // idle, playing, finished, waiting_queue
   const error = ref(null)
+  
+  // Для PvP режима
+  const pixelsToPlace = ref(5)
+  const pixelsPlaced = ref(0)
+  const opponentPixels = ref([]) // Пиксели оппонента в порядке размещения
+  const myPixels = ref([]) // Мои пиксели
+  const isInQueue = ref(false)
+  const winnerId = ref(null)
   
   const wsListeners = []
   
@@ -96,10 +104,29 @@ export function useGame() {
       )
       
       game.value = response.data
-      currentLevel.value = response.data.current_level
-      gridSize.value = response.data.grid_size
-      sequence.value = response.data.sequence || []
-      gameStatus.value = 'playing'
+      
+      // Для SOLO режима
+      if (response.data.mode === 'solo') {
+        currentLevel.value = response.data.current_level
+        gridSize.value = response.data.grid_size
+        sequence.value = response.data.sequence || []
+        gameStatus.value = 'playing'
+      }
+      // Для PvP режима
+      else if (response.data.mode === 'pvp') {
+        gridSize.value = response.data.grid_size || 10
+        pixelsToPlace.value = response.data.pixels_to_place || 5
+        myPixels.value = response.data.player1_pixels || []
+        opponentPixels.value = response.data.player2_pixels || []
+        pixelsPlaced.value = myPixels.value.length
+        
+        if (response.data.status === 'waiting') {
+          gameStatus.value = 'waiting'
+        } else {
+          gameStatus.value = 'playing'
+        }
+      }
+      
       error.value = null
       
       return response.data
@@ -124,10 +151,30 @@ export function useGame() {
       )
       
       game.value = response.data
-      currentLevel.value = response.data.current_level
-      gridSize.value = response.data.grid_size
-      sequence.value = response.data.sequence || []
-      gameStatus.value = 'playing'
+      
+      // Для PvP режима
+      if (response.data.mode === 'pvp') {
+        gridSize.value = response.data.grid_size || 10
+        pixelsToPlace.value = response.data.pixels_to_place || 5
+        
+        // Присоединившийся игрок - player2, его пиксели в player2_pixels
+        // Но нужно проверить, кто мы на самом деле (через user_id)
+        // Пока используем player2_pixels для присоединившегося
+        myPixels.value = response.data.player2_pixels || []
+        opponentPixels.value = response.data.player1_pixels || []
+        pixelsPlaced.value = myPixels.value.length
+        gameStatus.value = 'playing'
+        
+        // Подключаемся к WebSocket
+        const telegramId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1
+        connectGameWebSocket(response.data.id, telegramId)
+      } else {
+        currentLevel.value = response.data.current_level
+        gridSize.value = response.data.grid_size
+        sequence.value = response.data.sequence || []
+        gameStatus.value = 'playing'
+      }
+      
       error.value = null
       
       return response.data
@@ -248,6 +295,127 @@ export function useGame() {
     userSequence.value.push({ x, y })
   }
   
+  async function joinQueue() {
+    try {
+      const initData = window.Telegram?.WebApp?.initData || ''
+      const headers = {}
+      if (initData) {
+        headers['X-Telegram-Init-Data'] = initData
+      }
+      
+      const response = await axios.post(
+        `${API_URL}/api/games/queue`,
+        {},
+        { headers }
+      )
+      
+      if (response.data.status === 'matched') {
+        // Нашли пару, игра создана
+        game.value = response.data.game
+        gridSize.value = response.data.game.grid_size || 10
+        pixelsToPlace.value = response.data.game.pixels_to_place || 5
+        
+        // Определяем, кто мы (player1 или player2) по user_id
+        // Пока используем player1_pixels, так как первый в очереди становится player1
+        myPixels.value = response.data.game.player1_pixels || []
+        opponentPixels.value = response.data.game.player2_pixels || []
+        pixelsPlaced.value = myPixels.value.length
+        gameStatus.value = 'playing'
+        isInQueue.value = false
+        
+        // Подключаемся к WebSocket
+        const telegramId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1
+        connectGameWebSocket(response.data.game.id, telegramId)
+        
+        return { matched: true, game: response.data.game }
+      } else {
+        // В очереди, ждём пару
+        isInQueue.value = true
+        gameStatus.value = 'waiting_queue'
+        return { matched: false, waiting: true }
+      }
+    } catch (err) {
+      error.value = err.response?.data?.detail || err.message
+      throw err
+    }
+  }
+  
+  async function leaveQueue() {
+    try {
+      const initData = window.Telegram?.WebApp?.initData || ''
+      const headers = {}
+      if (initData) {
+        headers['X-Telegram-Init-Data'] = initData
+      }
+      
+      await axios.post(
+        `${API_URL}/api/games/queue/leave`,
+        {},
+        { headers }
+      )
+      
+      isInQueue.value = false
+      gameStatus.value = 'idle'
+    } catch (err) {
+      error.value = err.response?.data?.detail || err.message
+      throw err
+    }
+  }
+  
+  async function placePixel(x, y, color) {
+    if (!game.value) {
+      throw new Error('Игра не создана')
+    }
+    
+    try {
+      const initData = window.Telegram?.WebApp?.initData || ''
+      const headers = {}
+      if (initData) {
+        headers['X-Telegram-Init-Data'] = initData
+      }
+      
+      const response = await axios.post(
+        `${API_URL}/api/games/${game.value.id}/place-pixel`,
+        { x, y, color },
+        { headers }
+      )
+      
+      // Обновляем состояние
+      pixelsPlaced.value = response.data.pixels_placed
+      
+      // Добавляем пиксель в список
+      myPixels.value.push({ x, y, color, timestamp: Date.now() })
+      
+      // Отправляем через WebSocket оппоненту
+      sendGameMessage({
+        type: 'pixel_placed',
+        x,
+        y,
+        color,
+        timestamp: Date.now(),
+        pixels_placed: response.data.pixels_placed,
+        pixels_remaining: response.data.pixels_remaining
+      })
+      
+      // Проверяем, завершена ли игра
+      if (response.data.game_finished) {
+        gameStatus.value = 'finished'
+        winnerId.value = response.data.winner_id
+        
+        // Уведомляем оппонента
+        sendGameMessage({
+          type: 'game_finished',
+          winner_id: response.data.winner_id
+        })
+      }
+      
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.detail || err.message
+      throw err
+    }
+  }
+  
   function resetGame() {
     game.value = null
     currentLevel.value = 1
@@ -258,6 +426,12 @@ export function useGame() {
     isWaitingForInput.value = false
     gameStatus.value = 'idle'
     error.value = null
+    pixelsToPlace.value = 5
+    pixelsPlaced.value = 0
+    opponentPixels.value = []
+    myPixels.value = []
+    isInQueue.value = false
+    winnerId.value = null
     disconnectGameWebSocket()
   }
   
@@ -272,8 +446,19 @@ export function useGame() {
     isWaitingForInput,
     gameStatus,
     error,
+    // PvP режим
+    pixelsToPlace,
+    pixelsPlaced,
+    opponentPixels,
+    myPixels,
+    isInQueue,
+    winnerId,
+    // Методы
     createGame,
     joinGame,
+    joinQueue,
+    leaveQueue,
+    placePixel,
     submitAnswer,
     finishGame,
     getLeaderboard,

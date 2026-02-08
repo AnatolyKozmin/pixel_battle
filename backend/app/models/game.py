@@ -80,10 +80,22 @@ class GameSession(Base):
     grid_size = Column(Integer, default=3)
     
     # Последовательность для текущего уровня (JSON: список координат [{x, y}, ...])
+    # Используется только для SOLO режима
     sequence = Column(JSON, nullable=True)
     
     # Время показа последовательности (в миллисекундах на ячейку)
     show_delay_ms = Column(Integer, default=1000)
+    
+    # Для PvP режима: пиксели игроков в порядке размещения
+    # Формат: [{"x": int, "y": int, "color": str, "timestamp": float}, ...]
+    player1_pixels = Column(JSON, nullable=True, default=list)  # Пиксели игрока 1
+    player2_pixels = Column(JSON, nullable=True, default=list)  # Пиксели игрока 2
+    
+    # Количество пикселей, которые нужно поставить (для PvP)
+    pixels_to_place = Column(Integer, nullable=True, default=5)
+    
+    # ID победителя (если игра завершена)
+    winner_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     
     # Время создания и обновления
     created_at = Column(DateTime(timezone=True), server_default=func.now())
