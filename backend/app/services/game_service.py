@@ -123,75 +123,98 @@ class GameService:
         Если есть другой игрок в очереди, создаёт игру автоматически.
         Иначе добавляет пользователя в очередь.
         """
-        redis = await get_redis()
+        try:
+            redis = await get_redis()
+        except Exception as e:
+            print(f"Ошибка подключения к Redis: {e}")
+            raise ValueError(f"Ошибка подключения к Redis: {e}")
         
-        # Проверяем, есть ли кто-то в очереди
-        queue_data = await redis.lpop(GameService.PVP_QUEUE_KEY)
+        try:
+            # Проверяем, есть ли кто-то в очереди
+            queue_data = await redis.lpop(GameService.PVP_QUEUE_KEY)
+            print(f"[QUEUE] Пользователь {user_id} входит в очередь. Найдено в очереди: {queue_data}")
         
-        if queue_data:
-            # Нашли пару! Создаём игру
-            try:
-                waiting_user_id = int(json.loads(queue_data))
-            except (json.JSONDecodeError, ValueError):
-                waiting_user_id = int(queue_data)
+            if queue_data:
+                # Нашли пару! Создаём игру
+                try:
+                    waiting_user_id = int(json.loads(queue_data))
+                except (json.JSONDecodeError, ValueError):
+                    waiting_user_id = int(queue_data)
             
-            # Проверяем, что это не тот же пользователь
-            if waiting_user_id == user_id:
-                # Возвращаем обратно в очередь и ждём другого
-                await redis.rpush(GameService.PVP_QUEUE_KEY, json.dumps(user_id))
-                return None
-            
-            # Создаём игру с двумя игроками
-            code = GameService.generate_game_code()
-            max_attempts = 10
-            for _ in range(max_attempts):
-                result = await db.execute(
-                    select(GameSession).where(GameSession.code == code)
-                )
-                if result.scalar_one_or_none() is None:
-                    break
+                # Проверяем, что это не тот же пользователь
+                if waiting_user_id == user_id:
+                    # Возвращаем обратно в очередь и ждём другого
+                    await redis.rpush(GameService.PVP_QUEUE_KEY, json.dumps(user_id))
+                    return None
+                
+                # Создаём игру с двумя игроками
                 code = GameService.generate_game_code()
+                max_attempts = 10
+                for _ in range(max_attempts):
+                    result = await db.execute(
+                        select(GameSession).where(GameSession.code == code)
+                    )
+                    if result.scalar_one_or_none() is None:
+                        break
+                    code = GameService.generate_game_code()
+                else:
+                    raise ValueError("Не удалось сгенерировать уникальный код игры")
+                
+                game = GameSession(
+                    code=code,
+                    mode=GameMode.PVP,
+                    status=GameStatus.IN_PROGRESS,
+                    player1_id=waiting_user_id,
+                    player2_id=user_id,
+                    grid_size=GameService.PVP_GRID_SIZE,
+                    pixels_to_place=GameService.PVP_PIXELS_TO_PLACE,
+                    player1_pixels=[],
+                    player2_pixels=[]
+                )
+                
+                db.add(game)
+                await db.commit()
+                await db.refresh(game)
+                print(f"[QUEUE] Создана игра {game.id} для игроков {waiting_user_id} и {user_id}")
+                return game
             else:
-                raise ValueError("Не удалось сгенерировать уникальный код игры")
-            
-            game = GameSession(
-                code=code,
-                mode=GameMode.PVP,
-                status=GameStatus.IN_PROGRESS,
-                player1_id=waiting_user_id,
-                player2_id=user_id,
-                grid_size=GameService.PVP_GRID_SIZE,
-                pixels_to_place=GameService.PVP_PIXELS_TO_PLACE,
-                player1_pixels=[],
-                player2_pixels=[]
-            )
-            
-            db.add(game)
-            await db.commit()
-            await db.refresh(game)
-            return game
-        else:
-            # Нет никого в очереди, добавляем себя
-            await redis.rpush(GameService.PVP_QUEUE_KEY, json.dumps(user_id))
-            # Устанавливаем TTL 5 минут для очереди
-            await redis.expire(GameService.PVP_QUEUE_KEY, 300)
-            return None
+                # Нет никого в очереди, добавляем себя
+                await redis.rpush(GameService.PVP_QUEUE_KEY, json.dumps(user_id))
+                # Устанавливаем TTL 5 минут для очереди
+                await redis.expire(GameService.PVP_QUEUE_KEY, 300)
+                print(f"[QUEUE] Пользователь {user_id} добавлен в очередь. Ожидание соперника...")
+                return None
+        except Exception as e:
+            print(f"[QUEUE] Ошибка при работе с очередью: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     @staticmethod
     async def leave_pvp_queue(user_id: int):
         """Покинуть очередь ожидания"""
-        redis = await get_redis()
-        # Удаляем пользователя из очереди
-        queue_items = await redis.lrange(GameService.PVP_QUEUE_KEY, 0, -1)
-        for item in queue_items:
-            try:
-                item_user_id = int(json.loads(item))
-            except (json.JSONDecodeError, ValueError):
-                item_user_id = int(item)
-            
-            if item_user_id == user_id:
-                await redis.lrem(GameService.PVP_QUEUE_KEY, 1, item)
-                break
+        try:
+            redis = await get_redis()
+            # Удаляем пользователя из очереди
+            queue_items = await redis.lrange(GameService.PVP_QUEUE_KEY, 0, -1)
+            print(f"[QUEUE] Пользователь {user_id} покидает очередь. Текущая очередь: {queue_items}")
+            for item in queue_items:
+                try:
+                    item_user_id = int(json.loads(item))
+                except (json.JSONDecodeError, ValueError):
+                    try:
+                        item_user_id = int(item)
+                    except (ValueError, TypeError):
+                        continue
+                
+                if item_user_id == user_id:
+                    await redis.lrem(GameService.PVP_QUEUE_KEY, 1, item)
+                    print(f"[QUEUE] Пользователь {user_id} удалён из очереди")
+                    break
+        except Exception as e:
+            print(f"[QUEUE] Ошибка при выходе из очереди: {e}")
+            import traceback
+            traceback.print_exc()
     
     @staticmethod
     async def create_pvp_game(

@@ -65,7 +65,7 @@ class LeaderboardEntry(BaseModel):
     first_achieved: str
 
 
-@router.post("/create", response_model=GameResponse)
+@router.post("/create")
 async def create_game(
     request: GameCreateRequest,
     db: AsyncSession = Depends(get_db),
@@ -80,22 +80,28 @@ async def create_game(
         else:
             raise HTTPException(status_code=400, detail="Неверный режим игры. Используйте 'solo' или 'pvp'")
         
-        return GameResponse(
-            id=game.id,
-            code=game.code,
-            mode=game.mode.value,
-            status=game.status.value,
-            current_level=game.current_level,
-            grid_size=game.grid_size,
-            sequence=game.sequence,
-            player1_id=game.player1_id,
-            player2_id=game.player2_id,
-            pixels_to_place=game.pixels_to_place,
-            player1_pixels=game.player1_pixels,
-            player2_pixels=game.player2_pixels,
-            winner_id=game.winner_id
-        )
+        response_data = {
+            "id": game.id,
+            "code": game.code,
+            "mode": game.mode.value,
+            "status": game.status.value,
+            "current_level": game.current_level,
+            "grid_size": game.grid_size,
+            "sequence": game.sequence,
+            "player1_id": game.player1_id,
+            "player2_id": game.player2_id,
+            "pixels_to_place": game.pixels_to_place,
+            "player1_pixels": game.player1_pixels,
+            "player2_pixels": game.player2_pixels,
+            "winner_id": game.winner_id,
+            "current_user_id": current_user_id  # Добавляем для определения роли
+        }
+        
+        return response_data
     except Exception as e:
+        print(f"[CREATE GAME] Ошибка: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -109,12 +115,15 @@ async def join_queue(
     Если есть другой игрок в очереди, автоматически создаёт игру.
     """
     try:
+        print(f"[QUEUE API] Пользователь {current_user_id} пытается войти в очередь")
         game = await GameService.join_pvp_queue(db, current_user_id)
         
         if game:
             # Нашли пару, игра создана
+            print(f"[QUEUE API] Игра создана: {game.id}, player1={game.player1_id}, player2={game.player2_id}, current_user={current_user_id}")
             return {
                 "status": "matched",
+                "current_user_id": current_user_id,  # Добавляем ID текущего пользователя
                 "game": GameResponse(
                     id=game.id,
                     code=game.code,
@@ -133,11 +142,16 @@ async def join_queue(
             }
         else:
             # В очереди, ждём пару
+            print(f"[QUEUE API] Пользователь {current_user_id} добавлен в очередь")
             return {
                 "status": "waiting",
-                "message": "Ожидание соперника..."
+                "message": "Ожидание соперника...",
+                "current_user_id": current_user_id
             }
     except Exception as e:
+        import traceback
+        print(f"[QUEUE API] Ошибка при входе в очередь: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -153,33 +167,38 @@ async def leave_queue(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/join", response_model=GameResponse)
+@router.post("/join")
 async def join_game(
     request: GameJoinRequest,
     db: AsyncSession = Depends(get_db),
     current_user_id: int = Depends(get_current_user)
 ):
     """Присоединиться к PvP игре по коду"""
+    print(f"[JOIN GAME] Пользователь {current_user_id} пытается присоединиться к игре {request.code}")
     game = await GameService.join_pvp_game(db, request.code, current_user_id)
     
     if not game:
+        print(f"[JOIN GAME] Игра {request.code} не найдена или уже началась")
         raise HTTPException(status_code=404, detail="Игра не найдена или уже началась")
     
-    return GameResponse(
-        id=game.id,
-        code=game.code,
-        mode=game.mode.value,
-        status=game.status.value,
-        current_level=game.current_level,
-        grid_size=game.grid_size,
-        sequence=game.sequence,
-        player1_id=game.player1_id,
-        player2_id=game.player2_id,
-        pixels_to_place=game.pixels_to_place,
-        player1_pixels=game.player1_pixels,
-        player2_pixels=game.player2_pixels,
-        winner_id=game.winner_id
-    )
+    print(f"[JOIN GAME] Пользователь {current_user_id} присоединился к игре {game.id}")
+    
+    return {
+        "id": game.id,
+        "code": game.code,
+        "mode": game.mode.value,
+        "status": game.status.value,
+        "current_level": game.current_level,
+        "grid_size": game.grid_size,
+        "sequence": game.sequence,
+        "player1_id": game.player1_id,
+        "player2_id": game.player2_id,
+        "pixels_to_place": game.pixels_to_place,
+        "player1_pixels": game.player1_pixels,
+        "player2_pixels": game.player2_pixels,
+        "winner_id": game.winner_id,
+        "current_user_id": current_user_id  # Добавляем для определения роли
+    }
 
 
 @router.get("/{game_code}", response_model=GameResponse)

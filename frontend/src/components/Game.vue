@@ -13,8 +13,11 @@
       <button @click="startSoloGame" class="game-btn primary">
         🎯 Одиночная игра
       </button>
-      <button @click="showPvPMenu = true" class="game-btn secondary">
-        👥 PvP игра
+      <button @click="findOpponent" class="game-btn secondary">
+        🔍 Найти соперника (PvP)
+      </button>
+      <button @click="showPvPMenu = true" class="game-btn">
+        👥 PvP по коду
       </button>
       <button @click="openLeaderboard" class="game-btn">
         🏆 Лидерборд
@@ -255,20 +258,56 @@ async function startSoloGame() {
   }
 }
 
+let queuePollInterval = null
+
 async function findOpponent() {
   try {
+    console.log('Поиск соперника...')
     const result = await joinQueue()
+    console.log('Результат joinQueue:', result)
+    
     if (result.matched) {
       // Нашли пару, игра началась
+      console.log('Найдена пара, игра началась')
+      if (queuePollInterval) {
+        clearInterval(queuePollInterval)
+        queuePollInterval = null
+      }
       setupPvPWebSocket()
     } else {
-      // В очереди, ждём
+      // В очереди, ждём - начинаем периодический опрос
+      console.log('В очереди, начинаем опрос...')
       showPvPMenu.value = false
+      startQueuePolling()
     }
   } catch (err) {
     console.error('Ошибка поиска соперника:', err)
-    alert('Не удалось найти соперника. Попробуйте позже.')
+    const errorMsg = err.response?.data?.detail || err.message || 'Не удалось найти соперника'
+    alert(`Ошибка: ${errorMsg}`)
+    if (queuePollInterval) {
+      clearInterval(queuePollInterval)
+      queuePollInterval = null
+    }
   }
+}
+
+async function startQueuePolling() {
+  // Опрашиваем очередь каждые 2 секунды
+  queuePollInterval = setInterval(async () => {
+    try {
+      const result = await joinQueue()
+      if (result.matched) {
+        // Нашли пару!
+        if (queuePollInterval) {
+          clearInterval(queuePollInterval)
+          queuePollInterval = null
+        }
+        setupPvPWebSocket()
+      }
+    } catch (err) {
+      console.error('Ошибка опроса очереди:', err)
+    }
+  }, 2000) // Опрашиваем каждые 2 секунды
 }
 
 async function createPvPGame() {
@@ -403,9 +442,24 @@ function isCellClicked(x, y) {
 
 // Определяем, кто мы (player1 или player2)
 function getMyPlayerNumber() {
-  if (!game.value || !props.user) return 1
-  // Сравниваем user.id с player1_id и player2_id
-  const userId = props.user.id
+  if (!game.value) return 1
+  
+  // Пробуем получить user_id из разных источников
+  let userId = null
+  
+  // 1. Из props.user (если есть)
+  if (props.user?.id) {
+    userId = props.user.id
+  }
+  // 2. Из game.current_user_id (если был добавлен в ответ)
+  else if (game.value.current_user_id) {
+    userId = game.value.current_user_id
+  }
+  // 3. Fallback - используем player1_id (если мы создали игру)
+  else {
+    return 1
+  }
+  
   if (game.value.player1_id === userId) return 1
   if (game.value.player2_id === userId) return 2
   return 1 // По умолчанию player1
@@ -507,6 +561,12 @@ function resetGame() {
   joinCode.value = ''
   opponentPixelsDisplayed.value = []
   selectedColor.value = '#FF0000'
+  
+  // Останавливаем опрос очереди
+  if (queuePollInterval) {
+    clearInterval(queuePollInterval)
+    queuePollInterval = null
+  }
 }
 
 onMounted(() => {
@@ -522,6 +582,10 @@ async function openLeaderboard() {
 
 onUnmounted(() => {
   disconnectGameWebSocket()
+  if (queuePollInterval) {
+    clearInterval(queuePollInterval)
+    queuePollInterval = null
+  }
 })
 </script>
 

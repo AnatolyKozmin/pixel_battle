@@ -116,8 +116,19 @@ export function useGame() {
       else if (response.data.mode === 'pvp') {
         gridSize.value = response.data.grid_size || 10
         pixelsToPlace.value = response.data.pixels_to_place || 5
-        myPixels.value = response.data.player1_pixels || []
-        opponentPixels.value = response.data.player2_pixels || []
+        
+        // Определяем, кто мы (player1 или player2) по current_user_id
+        const currentUserId = response.data.current_user_id
+        const isPlayer1 = response.data.player1_id === currentUserId
+        
+        if (isPlayer1) {
+          myPixels.value = response.data.player1_pixels || []
+          opponentPixels.value = response.data.player2_pixels || []
+        } else {
+          myPixels.value = response.data.player2_pixels || []
+          opponentPixels.value = response.data.player1_pixels || []
+        }
+        
         pixelsPlaced.value = myPixels.value.length
         
         if (response.data.status === 'waiting') {
@@ -157,11 +168,18 @@ export function useGame() {
         gridSize.value = response.data.grid_size || 10
         pixelsToPlace.value = response.data.pixels_to_place || 5
         
-        // Присоединившийся игрок - player2, его пиксели в player2_pixels
-        // Но нужно проверить, кто мы на самом деле (через user_id)
-        // Пока используем player2_pixels для присоединившегося
-        myPixels.value = response.data.player2_pixels || []
-        opponentPixels.value = response.data.player1_pixels || []
+        // Определяем, кто мы (player1 или player2) по current_user_id
+        const currentUserId = response.data.current_user_id
+        const isPlayer1 = response.data.player1_id === currentUserId
+        
+        if (isPlayer1) {
+          myPixels.value = response.data.player1_pixels || []
+          opponentPixels.value = response.data.player2_pixels || []
+        } else {
+          myPixels.value = response.data.player2_pixels || []
+          opponentPixels.value = response.data.player1_pixels || []
+        }
+        
         pixelsPlaced.value = myPixels.value.length
         gameStatus.value = 'playing'
         
@@ -315,10 +333,18 @@ export function useGame() {
         gridSize.value = response.data.game.grid_size || 10
         pixelsToPlace.value = response.data.game.pixels_to_place || 5
         
-        // Определяем, кто мы (player1 или player2) по user_id
-        // Пока используем player1_pixels, так как первый в очереди становится player1
-        myPixels.value = response.data.game.player1_pixels || []
-        opponentPixels.value = response.data.game.player2_pixels || []
+        // Определяем, кто мы (player1 или player2) по current_user_id из ответа
+        const currentUserId = response.data.current_user_id
+        const isPlayer1 = response.data.game.player1_id === currentUserId
+        
+        if (isPlayer1) {
+          myPixels.value = response.data.game.player1_pixels || []
+          opponentPixels.value = response.data.game.player2_pixels || []
+        } else {
+          myPixels.value = response.data.game.player2_pixels || []
+          opponentPixels.value = response.data.game.player1_pixels || []
+        }
+        
         pixelsPlaced.value = myPixels.value.length
         gameStatus.value = 'playing'
         isInQueue.value = false
@@ -327,7 +353,7 @@ export function useGame() {
         const telegramId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 1
         connectGameWebSocket(response.data.game.id, telegramId)
         
-        return { matched: true, game: response.data.game }
+        return { matched: true, game: response.data.game, current_user_id: currentUserId }
       } else {
         // В очереди, ждём пару
         isInQueue.value = true
