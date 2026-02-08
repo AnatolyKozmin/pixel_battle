@@ -1,33 +1,50 @@
 <template>
   <div class="app">
     <div class="header">
-      <h1>🎨 Pixel Battle</h1>
-      <div class="user-info">
-        <span v-if="user" class="user-name">{{ user.first_name || 'Пользователь' }}</span>
-        <span class="pixels-count">Ваших пикселей: {{ user?.pixels_placed || 0 }}</span>
-        <span class="canvas-pixels-count" v-if="canvasStats">
-          Всего: {{ canvasStats.total_pixels }} 
-          ({{ canvasStats.coverage_percent }}%)
-        </span>
+      <button 
+        @click="showGameMenu = !showGameMenu" 
+        class="game-menu-btn"
+        :class="{ active: currentMode === 'game' }"
+      >
+        🎮
+      </button>
+      <h1 class="gradient-text">ИТиАБД feat. ЦТ</h1>
+      <div v-if="selectedColor && currentMode === 'canvas'" class="header-color-picker">
+        <input
+          type="color"
+          v-model="selectedColor"
+          @change="updateColor"
+        />
       </div>
     </div>
     
-    <!-- Переключатель режимов -->
-    <div class="mode-switcher">
-      <button 
-        @click="currentMode = 'canvas'" 
-        class="mode-btn"
-        :class="{ active: currentMode === 'canvas' }"
-      >
-        🎨 Холст
-      </button>
-      <button 
-        @click="currentMode = 'game'" 
-        class="mode-btn"
-        :class="{ active: currentMode === 'game' }"
-      >
-        🎮 Игра
-      </button>
+    <!-- Модальное окно игры -->
+    <div v-if="showGameMenu" class="game-menu-overlay" @click="showGameMenu = false">
+      <div class="game-menu" @click.stop>
+        <h2>🎮 Игры</h2>
+        <button 
+          @click="openGame('repeat')" 
+          class="game-menu-item"
+        >
+          <span class="game-icon">🔄</span>
+          <span class="game-title">Repeat Pixels</span>
+          <span class="game-desc">Повтори последовательность</span>
+        </button>
+        <button 
+          @click="openGame('pvp')" 
+          class="game-menu-item"
+        >
+          <span class="game-icon">⚔️</span>
+          <span class="game-title">PvP Battle</span>
+          <span class="game-desc">Соревнуйся с оппонентом</span>
+        </button>
+        <button 
+          @click="showGameMenu = false" 
+          class="game-menu-close"
+        >
+          Закрыть
+        </button>
+      </div>
     </div>
 
     <!-- Холст -->
@@ -46,15 +63,6 @@
         :style="{ cursor: isPanMode ? 'grab' : 'crosshair', touchAction: 'none' }"
       ></canvas>
       
-      <div v-if="selectedColor" class="color-picker">
-        <input
-          type="color"
-          v-model="selectedColor"
-          @change="updateColor"
-        />
-        <span class="color-hex">{{ selectedColor }}</span>
-      </div>
-      
     </div>
 
     <!-- Игра -->
@@ -67,25 +75,16 @@
       <div class="ios-bar-content">
         <button 
           @click="togglePanMode" 
-          class="ios-btn" 
+          class="ios-btn icon-only" 
           :class="{ active: isPanMode }"
         >
           <span class="ios-icon">{{ isPanMode ? '👆' : '✏️' }}</span>
-          <span class="ios-label">{{ isPanMode ? 'Перемещение' : 'Рисование' }}</span>
-        </button>
-        <button @click="openColorPicker" class="ios-btn">
-          <span class="ios-icon">🎨</span>
-          <span class="ios-label">Цвет</span>
         </button>
         <button @click="zoomIn" class="ios-btn icon-only">
           <span class="ios-icon">+</span>
         </button>
         <button @click="zoomOut" class="ios-btn icon-only">
           <span class="ios-icon">−</span>
-        </button>
-        <button @click="resetView" class="ios-btn">
-          <span class="ios-icon">↺</span>
-          <span class="ios-label">Сброс</span>
         </button>
         <button @click="toggleMusic" class="ios-btn icon-only" :class="{ active: isMusicEnabled }">
           <span class="ios-icon">{{ isMusicEnabled ? '🔊' : '🔇' }}</span>
@@ -109,6 +108,7 @@ const user = ref(null)
 const canvasStats = ref(null)
 const isPanMode = ref(false) // Режим перемещения
 const currentMode = ref('canvas') // 'canvas' или 'game'
+const showGameMenu = ref(false) // Показать меню игр
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002'
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8002'
@@ -401,10 +401,6 @@ function handleMouseLeave() {
   }
 }
 
-function openColorPicker() {
-  // Цвет уже выбран через input type="color"
-}
-
 function updateColor() {
   // Цвет обновлен
 }
@@ -417,9 +413,10 @@ function zoomOut() {
   zoomOutCanvas()
 }
 
-function resetView() {
-  resetZoom()
-  resetPan()
+function openGame(gameType) {
+  showGameMenu.value = false
+  currentMode.value = 'game'
+  // Здесь можно добавить логику для выбора типа игры, если нужно
 }
 </script>
 
@@ -432,17 +429,58 @@ function resetView() {
 }
 
 .header {
-  padding: 10px;
-  background: var(--tg-theme-header-bg-color, #ffffff);
-  border-bottom: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+  padding: 14px 10px;
+  background: transparent;
+  border: none;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  pointer-events: none; /* Позволяет кликать сквозь header */
+  min-height: 60px;
+}
+
+.header > * {
+  pointer-events: auto; /* Восстанавливаем кликабельность для элементов */
 }
 
 .header h1 {
   font-size: 20px;
   font-weight: bold;
+  flex: 1;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, #000000 0%, #FF6B35 50%, #000000 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient-shift 8s ease-in-out infinite;
+  font-family: 'TitleFont', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-top: 24px;
+}
+
+@keyframes gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
 .user-info {
@@ -451,6 +489,12 @@ function resetView() {
   align-items: flex-end;
   font-size: 12px;
   gap: 2px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin-right: 10px;
 }
 
 .user-name {
@@ -466,29 +510,199 @@ function resetView() {
   font-size: 11px;
 }
 
-.mode-switcher {
+/* Кнопка с джойстиком в левом верхнем углу */
+.game-menu-btn {
+  position: absolute;
+  left: 10px;
+  top: calc(50% + 12px);
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.05);
+  font-size: 24px;
+  cursor: pointer;
   display: flex;
-  gap: 10px;
-  padding: 10px;
-  background: var(--tg-theme-header-bg-color, #ffffff);
-  border-bottom: 1px solid var(--tg-theme-hint-color, #e0e0e0);
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+  animation: pulse 2s ease-in-out infinite;
 }
 
-.mode-btn {
-  flex: 1;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  background: white;
+.game-menu-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.game-menu-btn:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.game-menu-btn.active {
+  background: rgba(0, 122, 255, 0.15);
+  color: #007AFF;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    transform: translateY(-50%) scale(1.05);
+  }
+}
+
+/* Модальное окно игры */
+.game-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.game-menu {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 20px;
+  padding: 24px;
+  max-width: 90%;
+  width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.game-menu h2 {
+  margin: 0 0 20px 0;
+  font-size: 24px;
+  text-align: center;
+}
+
+.game-menu-item {
+  width: 100%;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.05);
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.game-menu-item:hover {
+  background: rgba(0, 122, 255, 0.1);
+  transform: scale(1.02);
+}
+
+.game-menu-item:active {
+  transform: scale(0.98);
+}
+
+.game-icon {
+  font-size: 32px;
+}
+
+.game-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #000;
+}
+
+.game-desc {
   font-size: 14px;
+  color: #666;
+}
+
+.game-menu-close {
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
   transition: all 0.2s;
 }
 
-.mode-btn.active {
-  background: #007AFF;
-  color: white;
-  border-color: #007AFF;
+.game-menu-close:hover {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.game-menu-close:active {
+  transform: scale(0.98);
+}
+
+/* Темная тема для модального окна */
+@media (prefers-color-scheme: dark) {
+  .game-menu {
+    background: rgba(28, 28, 30, 0.95);
+    color: #ffffff;
+  }
+  
+  .game-menu-item {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  .game-menu-item:hover {
+    background: rgba(0, 122, 255, 0.2);
+  }
+  
+  .game-title {
+    color: #ffffff;
+  }
+  
+  .game-desc {
+    color: #999;
+  }
+  
+  .game-menu-close {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+  
+  .game-menu-close:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
 }
 
 .game-wrapper {
@@ -497,12 +711,41 @@ function resetView() {
   padding-bottom: 100px;
 }
 
+/* Выбор цвета в header */
+.header-color-picker {
+  position: absolute;
+  right: 10px;
+  top: calc(50% + 12px);
+  transform: translateY(-50%);
+  z-index: 10;
+}
+
+.header-color-picker input[type="color"] {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 4px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.header-color-picker input[type="color"]:hover {
+  transform: scale(1.1);
+}
+
+.header-color-picker input[type="color"]:active {
+  transform: scale(0.95);
+}
+
 .canvas-container {
   flex: 1;
   position: relative;
   overflow: hidden;
   background: #f0f0f0;
   padding-bottom: 100px; /* Отступ для bottom bar с отступами */
+  padding-top: 60px; /* Отступ для header поверх контента */
 }
 
 canvas {
@@ -538,23 +781,23 @@ canvas {
 }
 
 
-/* iOS-style Bottom Bar - прямоугольник с закругленными углами */
+/* iOS-style Bottom Bar - прямоугольник с закругленными углами, компактный */
 .ios-bottom-bar {
   position: fixed;
   bottom: 16px;
-  left: 16px;
-  right: 16px;
-  padding: 12px 16px;
-  padding-bottom: max(12px, calc(16px + env(safe-area-inset-bottom)));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 14px;
+  padding-bottom: max(10px, calc(14px + env(safe-area-inset-bottom)));
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 0.5px solid rgba(0, 0, 0, 0.1);
-  border-radius: 20px;
+  border-radius: 30px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.05);
   z-index: 1000;
-  max-width: calc(100% - 32px);
-  margin: 0 auto;
+  width: fit-content;
+  min-width: auto;
 }
 
 /* Темная тема для iOS bottom bar */
@@ -585,8 +828,7 @@ canvas {
   gap: 8px;
   justify-content: center;
   align-items: center;
-  flex-wrap: wrap;
-  max-width: 100%;
+  flex-wrap: nowrap;
 }
 
 .ios-btn {
@@ -667,6 +909,10 @@ canvas {
   font-size: 20px;
 }
 
+.ios-btn.icon-only .ios-label {
+  display: none;
+}
+
 /* Адаптивность для мобильных устройств */
 @media (max-width: 768px) {
   .header {
@@ -687,12 +933,9 @@ canvas {
 
   .ios-bottom-bar {
     bottom: 12px;
-    left: 12px;
-    right: 12px;
-    padding: 10px 12px;
-    padding-bottom: max(10px, calc(12px + env(safe-area-inset-bottom)));
-    border-radius: 18px;
-    max-width: calc(100% - 24px);
+    padding: 8px 12px;
+    padding-bottom: max(8px, calc(12px + env(safe-area-inset-bottom)));
+    border-radius: 28px;
   }
 
   .ios-bar-content {
@@ -748,12 +991,9 @@ canvas {
 
   .ios-bottom-bar {
     bottom: 8px;
-    left: 8px;
-    right: 8px;
-    padding: 8px 10px;
-    padding-bottom: max(8px, calc(8px + env(safe-area-inset-bottom)));
-    border-radius: 16px;
-    max-width: calc(100% - 16px);
+    padding: 6px 10px;
+    padding-bottom: max(6px, calc(8px + env(safe-area-inset-bottom)));
+    border-radius: 26px;
   }
 
   .ios-bar-content {
