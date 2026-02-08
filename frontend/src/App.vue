@@ -96,7 +96,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { usePixelBattle } from './composables/usePixelBattle'
 import { useWebSocket } from './composables/useWebSocket'
 import { useAudio } from './composables/useAudio'
@@ -131,7 +131,8 @@ const {
   handleTouchEnd,
   pixels: canvasPixels,
   showGrid,
-  updateCanvasTransform
+  updateCanvasTransform,
+  redrawCanvas
 } = usePixelBattle(canvasRef, containerRef)
 
 // Функция для перезагрузки холста
@@ -182,6 +183,35 @@ onMounted(async () => {
   
   // Обработчик для завершения перетаскивания при отпускании мыши вне canvas
   window.addEventListener('mouseup', handleMouseUp)
+})
+
+// Watcher для переключения режимов - перерисовываем canvas при возврате на холст
+watch(currentMode, async (newMode) => {
+  if (newMode === 'canvas') {
+    // Ждём, пока DOM обновится
+    await nextTick()
+    
+    // Переинициализируем canvas, если нужно
+    if (canvasRef.value) {
+      // Проверяем, есть ли контекст
+      if (!canvasRef.value.getContext) {
+        await initCanvas()
+      } else {
+        // Просто обновляем transform и перерисовываем
+        updateCanvasTransform()
+        redrawCanvas()
+      }
+    } else {
+      // Canvas ещё не создан, инициализируем
+      await initCanvas()
+    }
+    
+    // Перезагружаем холст, чтобы получить актуальные данные
+    await loadCanvas(API_URL)
+    
+    // Обновляем статистику
+    await loadCanvasStats()
+  }
 })
 
 onUnmounted(() => {
